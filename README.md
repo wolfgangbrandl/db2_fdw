@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 Foreign Data Wrapper for DB2
 ===============================
 
@@ -84,8 +83,7 @@ We want to access the tables defined in the SAMPLE database:
 Then configure db2_fdw as PostgreSQL superuser like this:
 
     pgdb=# CREATE EXTENSION db2_fdw;
-    pgdb=# CREATE SERVER sample FOREIGN DATA WRAPPER db2_fdw OPTIONS
-           (dbserver 'SAMPLE');
+    pgdb=# CREATE SERVER sample FOREIGN DATA WRAPPER db2_fdw OPTIONS (dbserver 'SAMPLE');
     pgdb=# GRANT USAGE ON FOREIGN SERVER sample TO pguser;
 
 
@@ -94,8 +92,7 @@ the option **dbserver** below.)
 
 Then you can connect to PostgreSQL as `pguser` and define:
 
-    pgdb=> CREATE USER MAPPING FOR PUBLIC SERVER sample
-            OPTIONS (user '', password '');
+    pgdb=> CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user '', password '');
 
 
 
@@ -116,9 +113,7 @@ Now you can use the table like a regular PostgreSQL table.
 These functions are the handler and the validator function necessary to create
 a foreign data wrapper.
 
-    FOREIGN DATA WRAPPER db2_fdw
-      HANDLER db2_fdw_handler
-      VALIDATOR db2_fdw_validator
+    FOREIGN DATA WRAPPER db2_fdw HANDLER db2_fdw_handler VALIDATOR db2_fdw_validator
 
 The extension automatically creates a foreign data wrapper named `db2_fdw`.
 Normally that's all you need, and you can proceed to define foreign servers.
@@ -272,7 +267,7 @@ Column options (from PostgreSQL 9.2 on)
 DB2 permissions
 ------------------
 
-The DB2 user will obviously need CREATE SESSION privilege and the right
+The DB2 user will obviously need CONNECT privilege and the right
 to select from the table or view in question.
 
 
@@ -321,16 +316,19 @@ These conversions are automatically handled by db2_fdw:
 
     DB2 type                 | Possible PostgreSQL types
     -------------------------+--------------------------------------------------
-    CHAR                     | char, varchar, text
-    VARCHAR                  | char, varchar, text
-    CLOB                     | char, varchar, text, json
+    CHAR                     | char
+    VARCHAR                  | character varying
+    CLOB                     | text
+    VARGRAPHIC               | text
+    GRAPHIC                  | text
     BLOB                     | bytea
-    SMALLINT                 | numeric, float4, float8, char, varchar, text
-    INTEGER                  | numeric, float4, float8, char, varchar, text
-    BIGINT                   | numeric, float4, float8, char, varchar, text
-    DOUBLE                   | numeric, float4, float8, char, varchar, text
-    DATE                     | date, timestamp, timestamptz, char, varchar, text
-    TIMESTAMP                | date, timestamp, timestamptz, char, varchar, text
+    SMALLINT                 | smallint
+    INTEGER                  | integer
+    BIGINT                   | bigint
+    DOUBLE                   | numeric,float
+    DATE                     | date
+    TIMESTAMP                | timestamp
+    TIME                     | time
 
 This part is still under development. Restrictions will arise in further testing.
 
@@ -349,15 +347,14 @@ Modifying foreign data
 
 EXPLAIN
 -------
+For the explain the db2expln CLI command is called. Therefore the bin path of DB2_HOME has to be include into the PATH environment variable.
 
-ANALYZE
--------
 
 
 Support for IMPORT FOREIGN SCHEMA
 ---------------------------------
 
-From PostgreSQL 9.5 on, IMPORT FOREIGN SCHEMA is supported to bulk import
+From PostgreSQL 10.1 on, IMPORT FOREIGN SCHEMA is supported to bulk import
 table definitions for all tables in an DB2 schema.
 In addition to the documentation of IMPORT FOREIGN SCHEMA, consider the
 following:
@@ -496,51 +493,16 @@ Unless you are developing db2_fdw or want to test its functionality
 on an exotic platform, you don't have to do this.
 
 For the regression tests to work, you must have a PostgreSQL cluster
-(9.3 or better) and an DB2 server (10.1 or better with Locator or Spatial)
+(10.1 or better) and an DB2 server (11.1 or better with Locator or Spatial)
 running, and the db2_fdw binaries must be installed.
 The regression tests will create a database called `contrib_regression` and
-run a number of tests.  For the PostGIS regression tests to succeed,
-the PostGIS binaries must be installed.
+run a number of tests.
 
 The DB2 database must be prepared as follows:
-- A user `scott` with password `tiger` must exist (unless you want to edit
-  the regression test scripts).  The user needs CREATE SESSION and CREATE TABLE
-  system privileges and enough quota on its default tablespace, as well as
-  SELECT privileges on V$SQL and V$SQL_PLAN.
-- Two tables must be created as follows:
-
-        CREATE TABLE scott.typetest1 (
-           id  NUMBER(5)
-              CONSTRAINT typetest1_pkey PRIMARY KEY,
-           c   CHAR(10 CHAR),
-           nc  NCHAR(10),
-           vc  VARCHAR2(10 CHAR),
-           nvc NVARCHAR2(10),
-           lc  CLOB,
-           r   RAW(10),
-           u   RAW(16),
-           lb  BLOB,
-           lr  LONG RAW,
-           b   NUMBER(1),
-           num NUMBER(7,5),
-           fl  BINARY_FLOAT,
-           db  BINARY_DOUBLE,
-           d   DATE,
-           ts  TIMESTAMP WITH TIME ZONE,
-           ids INTERVAL DAY TO SECOND,
-           iym INTERVAL YEAR TO MONTH
-        ) SEGMENT CREATION IMMEDIATE;
-
-        CREATE TABLE scott.gis (
-           id  NUMBER(5) PRIMARY KEY,
-           g   MDSYS.SDO_GEOMETRY
-        ) SEGMENT CREATION IMMEDIATE;
-
-Set the environment for the PostgreSQL server so that it can establish an
-DB2 connection without connect string:
-If the DB2 server is on the same machine, set the environment variables
-DB2_SID and DB2_HOME appropriately, for a remote server set the
-environment variable TWO_TASK (or LOCAL on Windows) to the connect string.
+- The sample database 'SAMPLE' has to be created.
+A operating system user with password authentication hast to be created 
+and for the sake of simplification the rights DBADM granted on the SAMPLE 
+database.
 
 The regression tests are run as follows:
 
@@ -556,9 +518,10 @@ session and allows you to trace it with DBMS_MONITOR.SERV_MOD_ACT_TRACE_ENABLE.
 
 
 
-db2_fdw uses transaction isolation level Currently commited on the DB2 side.
-It is defined directly in the DB2 database.
-Currently commited is the default. To check the isolation level execute:
+The isolation level is directly defined in the database. Per default the 
+SAMPLE database is create with the isolation level 'currently commited'
+
+To check the isolation level execute:
      db2 get db cfg for SAMPLE|grep CUR_COMMIT
 
 If this is set to OFF the default is cursor stability.
@@ -585,84 +548,3 @@ If that causes an error, please also include the output of
 If you have a problem or question or any kind of feedback, the preferred
 option is to open an issue on [GitHub](https://github.com/wolfgangbrandl/db2_fdw)
 This requires a GitHub account.
-=======
-db2_fdw
-=======
-
-To build it, just do this:
-
-    make
-    make installcheck
-    make install
-
-If you encounter an error such as:
-
-    "Makefile", line 8: Need an operator
-
-You need to use GNU make, which may well be installed on your system as
-`gmake`:
-
-    gmake
-    gmake install
-    gmake installcheck
-
-If you encounter an error such as:
-
-    make: pg_config: Command not found
-
-Be sure that you have `pg_config` installed and in your path. If you used a
-package management system such as RPM to install PostgreSQL, be sure that the
-`-devel` package is also installed. If necessary tell the build process where
-to find it:
-
-    env PG_CONFIG=/path/to/pg_config make && make installcheck && make install
-
-And finally, if all that fails (and if you're on PostgreSQL 10.1 or lower, it
-likely will), copy the entire distribution directory to the `contrib/`
-subdirectory of the PostgreSQL source tree and try it there without
-`pg_config`:
-
-    env NO_PGXS=1 make && make installcheck && make install
-
-If you encounter an error such as:
-
-    ERROR:  must be owner of database regression
-
-You need to run the test suite using a super user, such as the default
-"postgres" super user:
-
-    make installcheck PGUSER=postgres
-
-Once db2_fdw is installed, you can add it to a database. If you're running
-PostgreSQL 9.6.0 or greater, it's a simple as connecting to a database as a
-super user and running:
-
-    CREATE EXTENSION db2_fdw;
-
-If you've upgraded your cluster to PostgreSQL 9.6 and already had db2_fdw
-installed, you can upgrade it to a properly packaged extension with:
-
-    CREATE EXTENSION db2_fdw FROM unpackaged;
-
-For versions of PostgreSQL less than 9.1.0, you'll need to run the
-installation script:
-
-    psql -d mydb -f /path/to/pgsql/share/contrib/db2_fdw.sql
-
-If you want to install db2_fdw and all of its supporting objects into a specific
-schema, use the `PGOPTIONS` environment variable to specify the schema, like
-so:
-
-    PGOPTIONS=--search_path=extensions psql -d mydb -f db2_fdw.sql
-
-Dependencies
-------------
-The `db2_fdw` data type needs a running DB2 Client or Server Installation.
-The package was developed depending on DB2 Version 11.1 and
-PostgreSQL Version 10.1.
-
-Copyright and License
----------------------
-
-Copyright (c) 2018 Wolfgang Brandl.
->>>>>>> d028d20b3c9657e4907bd8e9a752f5ea52fc55e5
