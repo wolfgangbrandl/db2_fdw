@@ -83,8 +83,7 @@ We want to access the tables defined in the SAMPLE database:
 Then configure db2_fdw as PostgreSQL superuser like this:
 
     pgdb=# CREATE EXTENSION db2_fdw;
-    pgdb=# CREATE SERVER sample FOREIGN DATA WRAPPER db2_fdw OPTIONS
-           (dbserver 'SAMPLE');
+    pgdb=# CREATE SERVER sample FOREIGN DATA WRAPPER db2_fdw OPTIONS (dbserver 'SAMPLE');
     pgdb=# GRANT USAGE ON FOREIGN SERVER sample TO pguser;
 
 
@@ -93,8 +92,7 @@ the option **dbserver** below.)
 
 Then you can connect to PostgreSQL as `pguser` and define:
 
-    pgdb=> CREATE USER MAPPING FOR PUBLIC SERVER sample
-            OPTIONS (user '', password '');
+    pgdb=> CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user '', password '');
 
 
 
@@ -115,9 +113,7 @@ Now you can use the table like a regular PostgreSQL table.
 These functions are the handler and the validator function necessary to create
 a foreign data wrapper.
 
-    FOREIGN DATA WRAPPER db2_fdw
-      HANDLER db2_fdw_handler
-      VALIDATOR db2_fdw_validator
+    FOREIGN DATA WRAPPER db2_fdw HANDLER db2_fdw_handler VALIDATOR db2_fdw_validator
 
 The extension automatically creates a foreign data wrapper named `db2_fdw`.
 Normally that's all you need, and you can proceed to define foreign servers.
@@ -271,7 +267,7 @@ Column options (from PostgreSQL 9.2 on)
 DB2 permissions
 ------------------
 
-The DB2 user will obviously need CREATE SESSION privilege and the right
+The DB2 user will obviously need CONNECT privilege and the right
 to select from the table or view in question.
 
 
@@ -320,16 +316,19 @@ These conversions are automatically handled by db2_fdw:
 
     DB2 type                 | Possible PostgreSQL types
     -------------------------+--------------------------------------------------
-    CHAR                     | char, varchar, text
-    VARCHAR                  | char, varchar, text
-    CLOB                     | char, varchar, text, json
+    CHAR                     | char
+    VARCHAR                  | character varying
+    CLOB                     | text
+    VARGRAPHIC               | text
+    GRAPHIC                  | text
     BLOB                     | bytea
-    SMALLINT                 | numeric, float4, float8, char, varchar, text
-    INTEGER                  | numeric, float4, float8, char, varchar, text
-    BIGINT                   | numeric, float4, float8, char, varchar, text
-    DOUBLE                   | numeric, float4, float8, char, varchar, text
-    DATE                     | date, timestamp, timestamptz, char, varchar, text
-    TIMESTAMP                | date, timestamp, timestamptz, char, varchar, text
+    SMALLINT                 | smallint
+    INTEGER                  | integer
+    BIGINT                   | bigint
+    DOUBLE                   | numeric,float
+    DATE                     | date
+    TIMESTAMP                | timestamp
+    TIME                     | time
 
 This part is still under development. Restrictions will arise in further testing.
 
@@ -348,15 +347,14 @@ Modifying foreign data
 
 EXPLAIN
 -------
+For the explain the db2expln CLI command is called. Therefore the bin path of DB2_HOME has to be include into the PATH environment variable.
 
-ANALYZE
--------
 
 
 Support for IMPORT FOREIGN SCHEMA
 ---------------------------------
 
-From PostgreSQL 9.5 on, IMPORT FOREIGN SCHEMA is supported to bulk import
+From PostgreSQL 10.1 on, IMPORT FOREIGN SCHEMA is supported to bulk import
 table definitions for all tables in an DB2 schema.
 In addition to the documentation of IMPORT FOREIGN SCHEMA, consider the
 following:
@@ -495,51 +493,16 @@ Unless you are developing db2_fdw or want to test its functionality
 on an exotic platform, you don't have to do this.
 
 For the regression tests to work, you must have a PostgreSQL cluster
-(9.3 or better) and an DB2 server (10.1 or better with Locator or Spatial)
+(10.1 or better) and an DB2 server (11.1 or better with Locator or Spatial)
 running, and the db2_fdw binaries must be installed.
 The regression tests will create a database called `contrib_regression` and
-run a number of tests.  For the PostGIS regression tests to succeed,
-the PostGIS binaries must be installed.
+run a number of tests.
 
 The DB2 database must be prepared as follows:
-- A user `scott` with password `tiger` must exist (unless you want to edit
-  the regression test scripts).  The user needs CREATE SESSION and CREATE TABLE
-  system privileges and enough quota on its default tablespace, as well as
-  SELECT privileges on V$SQL and V$SQL_PLAN.
-- Two tables must be created as follows:
-
-        CREATE TABLE scott.typetest1 (
-           id  NUMBER(5)
-              CONSTRAINT typetest1_pkey PRIMARY KEY,
-           c   CHAR(10 CHAR),
-           nc  NCHAR(10),
-           vc  VARCHAR2(10 CHAR),
-           nvc NVARCHAR2(10),
-           lc  CLOB,
-           r   RAW(10),
-           u   RAW(16),
-           lb  BLOB,
-           lr  LONG RAW,
-           b   NUMBER(1),
-           num NUMBER(7,5),
-           fl  BINARY_FLOAT,
-           db  BINARY_DOUBLE,
-           d   DATE,
-           ts  TIMESTAMP WITH TIME ZONE,
-           ids INTERVAL DAY TO SECOND,
-           iym INTERVAL YEAR TO MONTH
-        ) SEGMENT CREATION IMMEDIATE;
-
-        CREATE TABLE scott.gis (
-           id  NUMBER(5) PRIMARY KEY,
-           g   MDSYS.SDO_GEOMETRY
-        ) SEGMENT CREATION IMMEDIATE;
-
-Set the environment for the PostgreSQL server so that it can establish an
-DB2 connection without connect string:
-If the DB2 server is on the same machine, set the environment variables
-DB2_SID and DB2_HOME appropriately, for a remote server set the
-environment variable TWO_TASK (or LOCAL on Windows) to the connect string.
+- The sample database 'SAMPLE' has to be created.
+A operating system user with password authentication hast to be created 
+and for the sake of simplification the rights DBADM granted on the SAMPLE 
+database.
 
 The regression tests are run as follows:
 
@@ -555,9 +518,10 @@ session and allows you to trace it with DBMS_MONITOR.SERV_MOD_ACT_TRACE_ENABLE.
 
 
 
-db2_fdw uses transaction isolation level Currently commited on the DB2 side.
-It is defined directly in the DB2 database.
-Currently commited is the default. To check the isolation level execute:
+The isolation level is directly defined in the database. Per default the 
+SAMPLE database is create with the isolation level 'currently commited'
+
+To check the isolation level execute:
      db2 get db cfg for SAMPLE|grep CUR_COMMIT
 
 If this is set to OFF the default is cursor stability.
