@@ -1,0 +1,25 @@
+{
+    "name": "db2_fdw",
+    "abstract": "PostgreSQL Data Wrappper to DB" databases",
+    "description": "With the Data Wrapper you can acces DB2 Tabels",
+    "version": "1.0",
+    "maintainer": "Wolfgang Brandl",
+    "license": "postgresql",
+    "provides": {
+        "db2_fdw": {
+            "abstract": "PostgreSQL Data Wrappper to DB" databases",
+            "file": "sql/db2_fdw.sql",
+            "docfile": "doc/db2_fdw.md",
+            "version": "1.0"
+        }
+    },
+    "release_status": "unstable",
+
+    "generated_by": "Wolfgang Brandl",
+
+
+    "meta-spec": {
+        "version": "1.0.0",
+        "url": "http://pgxn.org/meta/spec.txt"
+    }
+}

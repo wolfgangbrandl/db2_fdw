@@ -1,0 +1,153 @@
+\set echo off
+DROP EXTENSION db2_fdw cascade;
+ERROR:  extension "db2_fdw" does not exist
+DROP USER MAPPING FOR PUBLIC SERVER sample;
+ERROR:  server "sample" does not exist
+DROP FOREIGN TABLE TYPETEST1;
+ERROR:  foreign table "typetest1" does not exist
+DROP FOREIGN TABLE EMPSM;
+ERROR:  foreign table "empsm" does not exist
+\set ECHO all
+CREATE EXTENSION db2_fdw;
+CREATE SERVER sample FOREIGN DATA WRAPPER db2_fdw OPTIONS (dbserver 'SAMPLE');
+CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user '', password '');
+IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO public;
+select * from employee;
+ empno  | firstnme  | midinit |  lastname  | workdept | phoneno |         hiredate         |   job    | edlevel | sex |        birthdate         |  salary   |  bonus  |  comm   
+--------+-----------+---------+------------+----------+---------+--------------------------+----------+---------+-----+--------------------------+-----------+---------+---------
+ 000010 | CHRISTINE | I       | HAAS       | A00      | 3978    | Sun Jan 01 00:00:00 1995 | PRES     |      18 | F   | Sat Aug 24 00:00:00 1963 | 152750.00 | 1000.00 | 4220.00
+ 000020 | MICHAEL   | L       | THOMPSON   | B01      | 3476    | Fri Oct 10 00:00:00 2003 | MANAGER  |      18 | M   | Thu Feb 02 00:00:00 1978 |  94250.00 |  800.00 | 3300.00
+ 000030 | SALLY     | A       | KWAN       | C01      | 4738    | Tue Apr 05 00:00:00 2005 | MANAGER  |      20 | F   | Tue May 11 00:00:00 1971 |  98250.00 |  800.00 | 3060.00
+ 000050 | JOHN      | B       | GEYER      | E01      | 6789    | Fri Aug 17 00:00:00 1979 | MANAGER  |      16 | M   | Thu Sep 15 00:00:00 1955 |  80175.00 |  800.00 | 3214.00
+ 000060 | IRVING    | F       | STERN      | D11      | 6423    | Sun Sep 14 00:00:00 2003 | MANAGER  |      16 | M   | Mon Jul 07 00:00:00 1975 |  72250.00 |  500.00 | 2580.00
+ 000070 | EVA       | D       | PULASKI    | D21      | 7831    | Fri Sep 30 00:00:00 2005 | MANAGER  |      16 | F   | Mon May 26 00:00:00 2003 |  96170.00 |  700.00 | 2893.00
+ 000090 | EILEEN    | W       | HENDERSON  | E11      | 5498    | Tue Aug 15 00:00:00 2000 | MANAGER  |      16 | F   | Sat May 15 00:00:00 1971 |  89750.00 |  600.00 | 2380.00
+ 000100 | THEODORE  | Q       | SPENSER    | E21      | 0972    | Mon Jun 19 00:00:00 2000 | MANAGER  |      14 | M   | Thu Dec 18 00:00:00 1980 |  86150.00 |  500.00 | 2092.00
+ 000110 | VINCENZO  | G       | LUCCHESSI  | A00      | 3490    | Mon May 16 00:00:00 1988 | SALESREP |      19 | M   | Thu Nov 05 00:00:00 1959 |  66500.00 |  900.00 | 3720.00
+ 000120 | SEAN      |         | O'CONNELL  | A00      | 2167    | Sun Dec 05 00:00:00 1993 | CLERK    |      14 | M   | Wed Oct 18 00:00:00 1972 |  49250.00 |  600.00 | 2340.00
+ 000130 | DELORES   | M       | QUINTANA   | C01      | 4578    | Sat Jul 28 00:00:00 2001 | ANALYST  |      16 | F   | Thu Sep 15 00:00:00 1955 |  73800.00 |  500.00 | 1904.00
+ 000140 | HEATHER   | A       | NICHOLLS   | C01      | 1793    | Fri Dec 15 00:00:00 2006 | ANALYST  |      18 | F   | Mon Jan 19 00:00:00 1976 |  68420.00 |  600.00 | 2274.00
+ 000150 | BRUCE     |         | ADAMSON    | D11      | 4510    | Tue Feb 12 00:00:00 2002 | DESIGNER |      16 | M   | Tue May 17 00:00:00 1977 |  55280.00 |  500.00 | 2022.00
+ 000160 | ELIZABETH | R       | PIANKA     | D11      | 3782    | Wed Oct 11 00:00:00 2006 | DESIGNER |      17 | F   | Sat Apr 12 00:00:00 1980 |  62250.00 |  400.00 | 1780.00
+ 000170 | MASATOSHI | J       | YOSHIMURA  | D11      | 2890    | Wed Sep 15 00:00:00 1999 | DESIGNER |      16 | M   | Mon Jan 05 00:00:00 1981 |  44680.00 |  500.00 | 1974.00
+ 000180 | MARILYN   | S       | SCOUTTEN   | D11      | 1682    | Mon Jul 07 00:00:00 2003 | DESIGNER |      17 | F   | Wed Feb 21 00:00:00 1979 |  51340.00 |  500.00 | 1707.00
+ 000190 | JAMES     | H       | WALKER     | D11      | 2986    | Mon Jul 26 00:00:00 2004 | DESIGNER |      16 | M   | Fri Jun 25 00:00:00 1982 |  50450.00 |  400.00 | 1636.00
+ 000200 | DAVID     |         | BROWN      | D11      | 4501    | Sun Mar 03 00:00:00 2002 | DESIGNER |      16 | M   | Sat May 29 00:00:00 1971 |  57740.00 |  600.00 | 2217.00
+ 000210 | WILLIAM   | T       | JONES      | D11      | 0942    | Sat Apr 11 00:00:00 1998 | DESIGNER |      17 | M   | Sun Feb 23 00:00:00 2003 |  68270.00 |  400.00 | 1462.00
+ 000220 | JENNIFER  | K       | LUTZ       | D11      | 0672    | Sat Aug 29 00:00:00 1998 | DESIGNER |      18 | F   | Sun Mar 19 00:00:00 1978 |  49840.00 |  600.00 | 2387.00
+ 000230 | JAMES     | J       | JEFFERSON  | D21      | 2094    | Thu Nov 21 00:00:00 1996 | CLERK    |      14 | M   | Fri May 30 00:00:00 1980 |  42180.00 |  400.00 | 1774.00
+ 000240 | SALVATORE | M       | MARINO     | D21      | 3780    | Sun Dec 05 00:00:00 2004 | CLERK    |      17 | M   | Sun Mar 31 00:00:00 2002 |  48760.00 |  600.00 | 2301.00
+ 000250 | DANIEL    | S       | SMITH      | D21      | 0961    | Sat Oct 30 00:00:00 1999 | CLERK    |      15 | M   | Wed Nov 12 00:00:00 1969 |  49180.00 |  400.00 | 1534.00
+ 000260 | SYBIL     | P       | JOHNSON    | D21      | 8953    | Sun Sep 11 00:00:00 2005 | CLERK    |      16 | F   | Tue Oct 05 00:00:00 1976 |  47250.00 |  300.00 | 1380.00
+ 000270 | MARIA     | L       | PEREZ      | D21      | 9001    | Sat Sep 30 00:00:00 2006 | CLERK    |      15 | F   | Mon May 26 00:00:00 2003 |  37380.00 |  500.00 | 2190.00
+ 000280 | ETHEL     | R       | SCHNEIDER  | E11      | 8997    | Mon Mar 24 00:00:00 1997 | OPERATOR |      17 | F   | Sun Mar 28 00:00:00 1976 |  36250.00 |  500.00 | 2100.00
+ 000290 | JOHN      | R       | PARKER     | E11      | 4502    | Tue May 30 00:00:00 2006 | OPERATOR |      12 | M   | Tue Jul 09 00:00:00 1985 |  35340.00 |  300.00 | 1227.00
+ 000300 | PHILIP    | X       | SMITH      | E11      | 2095    | Wed Jun 19 00:00:00 2002 | OPERATOR |      14 | M   | Wed Oct 27 00:00:00 1976 |  37750.00 |  400.00 | 1420.00
+ 000310 | MAUDE     | F       | SETRIGHT   | E11      | 3332    | Mon Sep 12 00:00:00 1994 | OPERATOR |      12 | F   | Fri Apr 21 00:00:00 1961 |  35900.00 |  300.00 | 1272.00
+ 000320 | RAMLAL    | V       | MEHTA      | E21      | 9990    | Fri Jul 07 00:00:00 1995 | FIELDREP |      16 | M   | Sat Aug 11 00:00:00 1962 |  39950.00 |  400.00 | 1596.00
+ 000330 | WING      |         | LEE        | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 |  45370.00 |  500.00 | 2030.00
+ 000340 | JASON     | R       | GOUNOT     | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 |  43840.00 |  500.00 | 1907.00
+ 200010 | DIAN      | J       | HEMMINGER  | A00      | 3978    | Sun Jan 01 00:00:00 1995 | SALESREP |      18 | F   | Tue Aug 14 00:00:00 1973 |  46500.00 | 1000.00 | 4220.00
+ 200120 | GREG      |         | ORLANDO    | A00      | 2167    | Sun May 05 00:00:00 2002 | CLERK    |      14 | M   | Wed Oct 18 00:00:00 1972 |  39250.00 |  600.00 | 2340.00
+ 200140 | KIM       | N       | NATZ       | C01      | 1793    | Fri Dec 15 00:00:00 2006 | ANALYST  |      18 | F   | Mon Jan 19 00:00:00 1976 |  68420.00 |  600.00 | 2274.00
+ 200170 | KIYOSHI   |         | YAMAMOTO   | D11      | 2890    | Thu Sep 15 00:00:00 2005 | DESIGNER |      16 | M   | Mon Jan 05 00:00:00 1981 |  64680.00 |  500.00 | 1974.00
+ 200220 | REBA      | K       | JOHN       | D11      | 0672    | Mon Aug 29 00:00:00 2005 | DESIGNER |      18 | F   | Sun Mar 19 00:00:00 1978 |  69840.00 |  600.00 | 2387.00
+ 200240 | ROBERT    | M       | MONTEVERDE | D21      | 3780    | Sun Dec 05 00:00:00 2004 | CLERK    |      17 | M   | Sat Mar 31 00:00:00 1984 |  37760.00 |  600.00 | 2301.00
+ 200280 | EILEEN    | R       | SCHWARTZ   | E11      | 8997    | Mon Mar 24 00:00:00 1997 | OPERATOR |      17 | F   | Mon Mar 28 00:00:00 1966 |  46250.00 |  500.00 | 2100.00
+ 200310 | MICHELLE  | F       | SPRINGER   | E11      | 3332    | Mon Sep 12 00:00:00 1994 | OPERATOR |      12 | F   | Fri Apr 21 00:00:00 1961 |  35900.00 |  300.00 | 1272.00
+ 200330 | HELENA    |         | WONG       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | F   | Sun Jul 18 00:00:00 1971 |  35370.00 |  500.00 | 2030.00
+ 200340 | ROY       | R       | ALONZO     | E21      | 5698    | Sat Jul 05 00:00:00 1997 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 |  31840.00 |  500.00 | 1907.00
+(42 rows)
+
+select * from sales;
+        sales_date        | sales_person |    region     | sales 
+--------------------------+--------------+---------------+-------
+ Sat Dec 31 00:00:00 2005 | LUCCHESSI    | Ontario-South |     1
+ Sat Dec 31 00:00:00 2005 | LEE          | Ontario-South |     3
+ Sat Dec 31 00:00:00 2005 | LEE          | Quebec        |     1
+ Sat Dec 31 00:00:00 2005 | LEE          | Manitoba      |     2
+ Sat Dec 31 00:00:00 2005 | GOUNOT       | Quebec        |     1
+ Wed Mar 29 00:00:00 2006 | LUCCHESSI    | Ontario-South |     3
+ Wed Mar 29 00:00:00 2006 | LUCCHESSI    | Quebec        |     1
+ Wed Mar 29 00:00:00 2006 | LEE          | Ontario-South |     2
+ Fri Mar 29 00:00:00 1996 | LEE          | Ontario-North |     2
+ Wed Mar 29 00:00:00 2006 | LEE          | Quebec        |     3
+ Wed Mar 29 00:00:00 2006 | LEE          | Manitoba      |     5
+ Wed Mar 29 00:00:00 2006 | GOUNOT       | Ontario-South |     3
+ Wed Mar 29 00:00:00 2006 | GOUNOT       | Quebec        |     1
+ Wed Mar 29 00:00:00 2006 | GOUNOT       | Manitoba      |     7
+ Thu Mar 30 00:00:00 2006 | LUCCHESSI    | Ontario-South |     1
+ Thu Mar 30 00:00:00 2006 | LUCCHESSI    | Quebec        |     2
+ Thu Mar 30 00:00:00 2006 | LUCCHESSI    | Manitoba      |     1
+ Thu Mar 30 00:00:00 2006 | LEE          | Ontario-South |     7
+ Thu Mar 30 00:00:00 2006 | LEE          | Ontario-North |     3
+ Thu Mar 30 00:00:00 2006 | LEE          | Quebec        |     7
+ Thu Mar 30 00:00:00 2006 | LEE          | Manitoba      |     4
+ Thu Mar 30 00:00:00 2006 | GOUNOT       | Ontario-South |     2
+ Thu Mar 30 00:00:00 2006 | GOUNOT       | Quebec        |    18
+ Fri Mar 31 00:00:00 2006 | GOUNOT       | Manitoba      |     1
+ Fri Mar 31 00:00:00 2006 | LUCCHESSI    | Manitoba      |     1
+ Fri Mar 31 00:00:00 2006 | LEE          | Ontario-South |    14
+ Fri Mar 31 00:00:00 2006 | LEE          | Ontario-North |     3
+ Fri Mar 31 00:00:00 2006 | LEE          | Quebec        |     7
+ Fri Mar 31 00:00:00 2006 | LEE          | Manitoba      |     3
+ Fri Mar 31 00:00:00 2006 | GOUNOT       | Ontario-South |     2
+ Fri Mar 31 00:00:00 2006 | GOUNOT       | Quebec        |     1
+ Sat Apr 01 00:00:00 2006 | LUCCHESSI    | Ontario-South |     3
+ Sat Apr 01 00:00:00 2006 | LUCCHESSI    | Manitoba      |     1
+ Sat Apr 01 00:00:00 2006 | LEE          | Ontario-South |     8
+ Sat Apr 01 00:00:00 2006 | LEE          | Ontario-North |      
+ Sat Apr 01 00:00:00 2006 | LEE          | Quebec        |     8
+ Sat Apr 01 00:00:00 2006 | LEE          | Manitoba      |     9
+ Sat Apr 01 00:00:00 2006 | GOUNOT       | Ontario-South |     3
+ Sat Apr 01 00:00:00 2006 | GOUNOT       | Ontario-North |     1
+ Sat Apr 01 00:00:00 2006 | GOUNOT       | Quebec        |     3
+ Sat Apr 01 00:00:00 2006 | GOUNOT       | Manitoba      |     7
+(41 rows)
+
+select * from employee a, sales b where a.lastname = b.sales_person;
+ empno  | firstnme | midinit | lastname  | workdept | phoneno |         hiredate         |   job    | edlevel | sex |        birthdate         |  salary  | bonus  |  comm   |        sales_date        | sales_person |    region     | sales 
+--------+----------+---------+-----------+----------+---------+--------------------------+----------+---------+-----+--------------------------+----------+--------+---------+--------------------------+--------------+---------------+-------
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | Mon May 16 00:00:00 1988 | SALESREP |      19 | M   | Thu Nov 05 00:00:00 1959 | 66500.00 | 900.00 | 3720.00 | Sat Dec 31 00:00:00 2005 | LUCCHESSI    | Ontario-South |     1
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | Mon May 16 00:00:00 1988 | SALESREP |      19 | M   | Thu Nov 05 00:00:00 1959 | 66500.00 | 900.00 | 3720.00 | Sat Apr 01 00:00:00 2006 | LUCCHESSI    | Manitoba      |     1
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | Mon May 16 00:00:00 1988 | SALESREP |      19 | M   | Thu Nov 05 00:00:00 1959 | 66500.00 | 900.00 | 3720.00 | Sat Apr 01 00:00:00 2006 | LUCCHESSI    | Ontario-South |     3
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | Mon May 16 00:00:00 1988 | SALESREP |      19 | M   | Thu Nov 05 00:00:00 1959 | 66500.00 | 900.00 | 3720.00 | Fri Mar 31 00:00:00 2006 | LUCCHESSI    | Manitoba      |     1
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | Mon May 16 00:00:00 1988 | SALESREP |      19 | M   | Thu Nov 05 00:00:00 1959 | 66500.00 | 900.00 | 3720.00 | Thu Mar 30 00:00:00 2006 | LUCCHESSI    | Manitoba      |     1
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | Mon May 16 00:00:00 1988 | SALESREP |      19 | M   | Thu Nov 05 00:00:00 1959 | 66500.00 | 900.00 | 3720.00 | Thu Mar 30 00:00:00 2006 | LUCCHESSI    | Quebec        |     2
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | Mon May 16 00:00:00 1988 | SALESREP |      19 | M   | Thu Nov 05 00:00:00 1959 | 66500.00 | 900.00 | 3720.00 | Thu Mar 30 00:00:00 2006 | LUCCHESSI    | Ontario-South |     1
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | Mon May 16 00:00:00 1988 | SALESREP |      19 | M   | Thu Nov 05 00:00:00 1959 | 66500.00 | 900.00 | 3720.00 | Wed Mar 29 00:00:00 2006 | LUCCHESSI    | Quebec        |     1
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | Mon May 16 00:00:00 1988 | SALESREP |      19 | M   | Thu Nov 05 00:00:00 1959 | 66500.00 | 900.00 | 3720.00 | Wed Mar 29 00:00:00 2006 | LUCCHESSI    | Ontario-South |     3
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Sat Dec 31 00:00:00 2005 | LEE          | Ontario-South |     3
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Sat Apr 01 00:00:00 2006 | LEE          | Manitoba      |     9
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Sat Apr 01 00:00:00 2006 | LEE          | Quebec        |     8
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Sat Apr 01 00:00:00 2006 | LEE          | Ontario-North |      
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Sat Apr 01 00:00:00 2006 | LEE          | Ontario-South |     8
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Fri Mar 31 00:00:00 2006 | LEE          | Manitoba      |     3
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Fri Mar 31 00:00:00 2006 | LEE          | Quebec        |     7
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Fri Mar 31 00:00:00 2006 | LEE          | Ontario-North |     3
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Fri Mar 31 00:00:00 2006 | LEE          | Ontario-South |    14
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Thu Mar 30 00:00:00 2006 | LEE          | Manitoba      |     4
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Thu Mar 30 00:00:00 2006 | LEE          | Quebec        |     7
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Thu Mar 30 00:00:00 2006 | LEE          | Ontario-North |     3
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Thu Mar 30 00:00:00 2006 | LEE          | Ontario-South |     7
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Wed Mar 29 00:00:00 2006 | LEE          | Manitoba      |     5
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Wed Mar 29 00:00:00 2006 | LEE          | Quebec        |     3
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Fri Mar 29 00:00:00 1996 | LEE          | Ontario-North |     2
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Wed Mar 29 00:00:00 2006 | LEE          | Ontario-South |     2
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Sat Dec 31 00:00:00 2005 | LEE          | Manitoba      |     2
+ 000330 | WING     |         | LEE       | E21      | 2103    | Thu Feb 23 00:00:00 2006 | FIELDREP |      14 | M   | Sun Jul 18 00:00:00 1971 | 45370.00 | 500.00 | 2030.00 | Sat Dec 31 00:00:00 2005 | LEE          | Quebec        |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Sat Dec 31 00:00:00 2005 | GOUNOT       | Quebec        |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Sat Apr 01 00:00:00 2006 | GOUNOT       | Manitoba      |     7
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Sat Apr 01 00:00:00 2006 | GOUNOT       | Quebec        |     3
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Sat Apr 01 00:00:00 2006 | GOUNOT       | Ontario-North |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Sat Apr 01 00:00:00 2006 | GOUNOT       | Ontario-South |     3
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Fri Mar 31 00:00:00 2006 | GOUNOT       | Quebec        |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Fri Mar 31 00:00:00 2006 | GOUNOT       | Ontario-South |     2
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Fri Mar 31 00:00:00 2006 | GOUNOT       | Manitoba      |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Thu Mar 30 00:00:00 2006 | GOUNOT       | Quebec        |    18
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Thu Mar 30 00:00:00 2006 | GOUNOT       | Ontario-South |     2
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Wed Mar 29 00:00:00 2006 | GOUNOT       | Manitoba      |     7
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Wed Mar 29 00:00:00 2006 | GOUNOT       | Quebec        |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | Thu May 05 00:00:00 1977 | FIELDREP |      16 | M   | Thu May 17 00:00:00 1956 | 43840.00 | 500.00 | 1907.00 | Wed Mar 29 00:00:00 2006 | GOUNOT       | Ontario-South |     3
+(41 rows)
+
