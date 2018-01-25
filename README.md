@@ -1,8 +1,6 @@
 db2_fdw
 =======
 
-A long description
-
 To build it, just do this:
 
     make
