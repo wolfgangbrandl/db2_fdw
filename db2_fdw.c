@@ -2156,13 +2156,13 @@ db2ImportForeignSchema (ImportForeignSchemaStmt * stmt, Oid serverOid)
 	appendStringInfo (&buf, "bytea");
 	break;
       case SQL_TYPE_DATE:
-	appendStringInfo (&buf, "timestamp(0) without time zone");
+	appendStringInfo (&buf, "date");
 	break;
       case SQL_TYPE_STAMP:
 	appendStringInfo (&buf, "timestamp(%d) without time zone", (typescale > 6) ? 6 : typescale);
 	break;
       case SQL_TYPE_TIME:
-	appendStringInfo (&buf, "timestamp(%d) with time zone", (typescale > 6) ? 6 : typescale);
+	appendStringInfo (&buf, "time(%d) without time zone", (typescale > 6) ? 6 : typescale);
 	break;
       default:
 	elog (DEBUG2, "column \"%s\" of table \"%s\" has an untranslatable data type", colname, tabname);

@@ -17,5 +17,5 @@ BEGIN;
 
 DROP OPERATOR #? (text, text);
 DROP FUNCTION db2_fdw(text, text);
-DROP TYPE db2_fdw CASCADE;
+DROP EXTENSION db2_fdw CASCADE;
 COMMIT;
