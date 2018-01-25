@@ -83,8 +83,7 @@ We want to access the tables defined in the SAMPLE database:
 Then configure db2_fdw as PostgreSQL superuser like this:
 
     pgdb=# CREATE EXTENSION db2_fdw;
-    pgdb=# CREATE SERVER sample FOREIGN DATA WRAPPER db2_fdw OPTIONS
-           (dbserver 'SAMPLE');
+    pgdb=# CREATE SERVER sample FOREIGN DATA WRAPPER db2_fdw OPTIONS (dbserver 'SAMPLE');
     pgdb=# GRANT USAGE ON FOREIGN SERVER sample TO pguser;
 
 
@@ -93,8 +92,7 @@ the option **dbserver** below.)
 
 Then you can connect to PostgreSQL as `pguser` and define:
 
-    pgdb=> CREATE USER MAPPING FOR PUBLIC SERVER sample
-            OPTIONS (user '', password '');
+    pgdb=> CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user '', password '');
 
 
 
@@ -115,9 +113,7 @@ Now you can use the table like a regular PostgreSQL table.
 These functions are the handler and the validator function necessary to create
 a foreign data wrapper.
 
-    FOREIGN DATA WRAPPER db2_fdw
-      HANDLER db2_fdw_handler
-      VALIDATOR db2_fdw_validator
+    FOREIGN DATA WRAPPER db2_fdw HANDLER db2_fdw_handler VALIDATOR db2_fdw_validator
 
 The extension automatically creates a foreign data wrapper named `db2_fdw`.
 Normally that's all you need, and you can proceed to define foreign servers.
