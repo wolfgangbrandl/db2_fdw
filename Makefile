@@ -22,7 +22,8 @@ include $(PGXS)
 
 
 checkin:
-	git remote set-url origin https://github.com/wolfgangbrandl/db2_fdw.git
+	git remote set-url origin git@github.com:wolfgangbrandl/db2_fdw.git
+#	git remote set-url origin https://github.com/wolfgangbrandl/db2_fdw.git
 #	git remote set-url origin https://brandlw@git.brz.gv.at/bitbucket/scm/izsdbpost/db2_fdw.git
 	git add --all
 	git commit -m "`date`"

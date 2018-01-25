@@ -60,7 +60,7 @@ I also assume that db2_fdw has been compiled and installed (see the
 We want to access the tables defined in the SAMPLE database:
 
     db2 describe table DB2INST1.EMPLOYEE
-_ 
+ 
                                     Data type                     Column
     Column name                     schema    Data type name      Length     Scale Nulls
     ------------------------------- --------- ------------------- ---------- ----- ------
