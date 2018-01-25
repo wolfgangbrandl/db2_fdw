@@ -271,7 +271,7 @@ Column options (from PostgreSQL 9.2 on)
 DB2 permissions
 ------------------
 
-The DB2 user will obviously need CREATE SESSION privilege and the right
+The DB2 user will obviously need CONNECT privilege and the right
 to select from the table or view in question.
 
 
@@ -320,16 +320,19 @@ These conversions are automatically handled by db2_fdw:
 
     DB2 type                 | Possible PostgreSQL types
     -------------------------+--------------------------------------------------
-    CHAR                     | char, varchar, text
-    VARCHAR                  | char, varchar, text
-    CLOB                     | char, varchar, text, json
+    CHAR                     | char
+    VARCHAR                  | character varying
+    CLOB                     | text
+    VARGRAPHIC               | text
+    GRAPHIC                  | text
     BLOB                     | bytea
-    SMALLINT                 | numeric, float4, float8, char, varchar, text
-    INTEGER                  | numeric, float4, float8, char, varchar, text
-    BIGINT                   | numeric, float4, float8, char, varchar, text
-    DOUBLE                   | numeric, float4, float8, char, varchar, text
-    DATE                     | date, timestamp, timestamptz, char, varchar, text
-    TIMESTAMP                | date, timestamp, timestamptz, char, varchar, text
+    SMALLINT                 | smallint
+    INTEGER                  | integer
+    BIGINT                   | bigint
+    DOUBLE                   | numeric,float
+    DATE                     | date
+    TIMESTAMP                | timestamp
+    TIME                     | time
 
 This part is still under development. Restrictions will arise in further testing.
 
@@ -348,15 +351,14 @@ Modifying foreign data
 
 EXPLAIN
 -------
+For the explain the db2expln CLI command is called. Therefore the bin path of DB2_HOME has to be include into the PATH environment variable.
 
-ANALYZE
--------
 
 
 Support for IMPORT FOREIGN SCHEMA
 ---------------------------------
 
-From PostgreSQL 9.5 on, IMPORT FOREIGN SCHEMA is supported to bulk import
+From PostgreSQL 10.1 on, IMPORT FOREIGN SCHEMA is supported to bulk import
 table definitions for all tables in an DB2 schema.
 In addition to the documentation of IMPORT FOREIGN SCHEMA, consider the
 following:
