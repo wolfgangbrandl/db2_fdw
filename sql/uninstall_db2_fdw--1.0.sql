@@ -15,7 +15,9 @@ BEGIN;
 -- You can use this statements as
 -- template for your extension.
 
-DROP OPERATOR #? (text, text);
-DROP FUNCTION db2_fdw(text, text);
+DROP FUNCTION db2_fdw_handler();
+DROP FUNCTION db2_fdw_validator(text[], oid);
+DROP FUNCTION db2_close_connections();
+DROP FUNCTION db2_diag(name DEFAULT NULL);
 DROP EXTENSION db2_fdw CASCADE;
 COMMIT;
