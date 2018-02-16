@@ -3,7 +3,6 @@ EXTVERSION   = $(shell grep default_version $(EXTENSION).control | sed -e "s/def
 MODULE_big   = db2_fdw
 OBJS         = db2_fdw.o db2_utils.o
 
-#DATA         = $(filter-out $(wildcard sql/*--*.sql),$(wildcard sql/*.sql))
 DATA         = $(wildcard sql/*--*.sql)
 DOCS         = $(wildcard doc/*.md)
 TESTS        = $(wildcard test/sql/*.sql)

@@ -12,4 +12,7 @@ IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO public;
 select * from employee;
 select * from sales;
 select * from employee a, sales b where a.lastname = b.sales_person;
+create table l_employee as select * from employee;
+select * from l_employee a, sales b where a.lastname = b.sales_person;
+
 
