@@ -10,7 +10,8 @@ ERROR:  foreign table "empsm" does not exist
 \set ECHO all
 CREATE EXTENSION db2_fdw;
 CREATE SERVER sample FOREIGN DATA WRAPPER db2_fdw OPTIONS (dbserver 'SAMPLE');
-CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user '', password '');
+CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user 'dbtest', password 'start123');
+-- CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user '', password '');
 IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO public;
 select * from employee;
  empno  | firstnme  | midinit |  lastname  | workdept | phoneno |  hiredate  |   job    | edlevel | sex | birthdate  |  salary   |  bonus  |  comm   
