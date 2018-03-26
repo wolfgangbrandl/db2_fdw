@@ -174,7 +174,7 @@ extern int db2ExecuteQuery (db2Session * session, const struct db2Table *db2Tabl
 extern int db2FetchNext (db2Session * session);
 extern void db2GetLob (db2Session * session, void *locptr, db2Type type, char **value, long *value_len, unsigned long trunc);
 extern void db2ClientVersion (int *major, int *minor, int *update, int *patch, int *port_patch);
-extern void db2ServerVersion (db2Session * session, int *major, int *minor, int *update, int *patch, int *port_patch);
+extern void db2ServerVersion (const char *connectstring, char *user, char *password, char * version, int len);
 extern void *db2GetGeometryType (db2Session * session);
 extern int db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **colname, db2Type * type, int *charlen, int *typeprec, int *typescale, int *nullable, int *key);
 

@@ -557,6 +557,7 @@ db2_diag (PG_FUNCTION_ARGS)
 {
   Oid srvId = InvalidOid;
   char *pgversion;
+  char  server_version[100];
   int major, minor, update, patch, port_patch;
   StringInfoData version;
 
@@ -640,14 +641,14 @@ db2_diag (PG_FUNCTION_ARGS)
     nls_lang = guessNlsLang (nls_lang);
 
     /* connect to DB2 database */
-    session = db2GetSession (dbserver, user, password, nls_lang, NULL, 1);
+/*    session = db2GetSession (dbserver, user, password, nls_lang, NULL, 1);*/
 
     /* get the server version */
-    db2ServerVersion (session, &major, &minor, &update, &patch, &port_patch);
-    appendStringInfo (&version, ", DB2 server %d.%d.%d.%d.%d", major, minor, update, patch, port_patch);
+    db2ServerVersion (dbserver, user, password, server_version,sizeof(server_version));
+    appendStringInfo (&version, ", DB2 server %s", server_version);
 
     /* free the session (connection will be cached) */
-    pfree (session);
+    /*pfree (session);*/
   }
 
   PG_RETURN_TEXT_P (cstring_to_text (version.data));

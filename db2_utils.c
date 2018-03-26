@@ -1293,17 +1293,64 @@ db2ClientVersion (int *major, int *minor, int *update, int *patch, int *port_pat
  * 		Returns the five components of the server version.
  */
 void
-db2ServerVersion (db2Session * session, int *major, int *minor, int *update, int *patch, int *port_patch)
+db2ServerVersion (const char *connectstring, char *user, char *password, char * version, int len)
 {
-  DB2Text version_text[1000];
+  sb4  ciRC = OCI_SUCCESS;
+  OraText vers[len];
+  OCIEnv *envhp = NULL;
+  OCIError *errhp = NULL;
+  OCISvcCtx *svchp = NULL;
+
+
+  memset (vers,0x00,len);
+  /* create environment handle */
+  if (checkerr (OCIEnvCreate ((OCIEnv **) & envhp, (ub4) OCI_OBJECT,
+        (dvoid *) 0, (dvoid * (*)(dvoid *, size_t)) 0,
+        (dvoid * (*)(dvoid *, dvoid *, size_t)) 0, (void (*)(dvoid *, dvoid *)) 0, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV) != 0) {
+      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIEnvCreate failed to create environment handle", db2Message);
+  }
+  /* allocate error handle */
+  if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & errhp, (ub4) OCI_HTYPE_ERROR, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIHandleAlloc failed to allocate error handle", db2Message);
+  }
+
+  if (checkerr (OCILogon (envhp,
+                            errhp,
+                            &svchp,
+                            (DB2Text *) user,
+                            strlen ((char *) user),
+                            (DB2Text *) password,
+                            strlen ((char *) password), (DB2Text *) connectstring, strlen ((char *) connectstring)), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection to foreign DB2 server", db2Message);
+  }
 
   /* get version information from remote server */
-  if (checkerr (OCIServerVersion (session->srvp->srvhp, session->envp->errhp, version_text, 1000, OCI_HTYPE_SERVER), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+  if (checkerr (OCIServerVersion (svchp, errhp, vers, len, OCI_HTYPE_SVCCTX ), (dvoid *) errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
     db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error getting server version: OCIServerVersion failed to retrieve version", db2Message);
   }
 
-  *major = 10;
-  *minor = 5;
+  strcpy (version,(char *)vers);
+  /* disconnect from the database */
+  if (checkerr ( OCILogoff( svchp, errhp ), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot Logoff from DB2 server", db2Message);
+  }
+
+  /* free connection handle */
+  if (checkerr (OCIHandleFree( svchp, OCI_HTYPE_SVCCTX ), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free connection Handle", db2Message);
+  }
+
+  /* free error handle */
+  if (checkerr (OCIHandleFree( errhp, OCI_HTYPE_ERROR ),(dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free error handle", db2Message);
+  }
+
+  /* free environment handle */
+  if (checkerr (OCIHandleFree( envhp, OCI_HTYPE_ENV ),(dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free environment handle", db2Message);
+  }
+
+  (void)OCITerminate( OCI_DEFAULT );
 }
 
 /*
