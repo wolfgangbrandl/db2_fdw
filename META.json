@@ -13,6 +13,13 @@
             "version": "1.0.0"
         }
     },
+    "resources": {
+      "repository": {
+        "url":  "https://github.com/wolfgangbrandl/db2_fdw.git",
+        "web":  "https://github.com/wolfgangbrandl/db2_fdw",
+        "type": "git"
+      }
+   },
     "release_status": "unstable",
 
     "generated_by": "Wolfgang Brandl",
