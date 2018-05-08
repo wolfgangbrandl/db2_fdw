@@ -1,6 +1,6 @@
 {
     "name": "db2_fdw",
-    "abstract": "PostgreSQL Data Wrappper to DB" databases",
+    "abstract": "PostgreSQL Data Wrappper to DB2 databases",
     "description": "With the Data Wrapper you can acces DB2 Tabels",
     "version": "1.0",
     "maintainer": "Wolfgang Brandl",
