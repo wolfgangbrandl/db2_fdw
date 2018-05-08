@@ -10,16 +10,17 @@
             "abstract": "PostgreSQL Data Wrappper to DB2 databases",
             "file": "sql/db2_fdw.sql",
             "docfile": "doc/db2_fdw.md",
-            "version": "1.0.1"
+            "version": "1.0.0"
         }
     },
     "release_status": "unstable",
 
     "generated_by": "Wolfgang Brandl",
-
-
     "meta-spec": {
-        "version": "1.0.1",
+        "version": "1.0.0",
         "url": "http://pgxn.org/meta/spec.txt"
-    }
+    },
+    "tags": [
+      "DB2 Data Wrapper"
+   ]
 }
