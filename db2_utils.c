@@ -1295,7 +1295,6 @@ db2ClientVersion (int *major, int *minor, int *update, int *patch, int *port_pat
 void
 db2ServerVersion (const char *connectstring, char *user, char *password, char * version, int len)
 {
-  sb4  ciRC = OCI_SUCCESS;
   OraText vers[len];
   OCIEnv *envhp = NULL;
   OCIError *errhp = NULL;
@@ -1366,8 +1365,11 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
   char typename[129] = { '\0' }, isnull[2] = { '\0'};
   int count = 0;
   const char *const schema_query = "select count(*) from SYSIBM.SYSSCHEMATA where name=:nsp";
-  const char *const column_query = "select A.TABLE_NAME,B.NAME,COLTYPE,LENGTH,SCALE,COLNO \n"
-    "from sysibm.tables a,sysibm.SYSCOLUMNS b \n" "where table_schema=:nsp and TABLE_TYPE like 'BASE TABLE%' and A.TABLE_NAME = B.TBNAME \n" "order by TABLE_NAME,COLNO";
+  const char *const column_query = 
+    "select A.TABLE_NAME,B.NAME,COLTYPE,LENGTH,SCALE,COLNO \n"
+    "from sysibm.tables a,sysibm.SYSCOLUMNS b \n" 
+    "where table_schema=:nsp and (TABLE_TYPE like 'BASE TABLE%' OR TABLE_TYPE like 'VIEW') and A.TABLE_NAME = B.TBNAME \n" 
+    "order by TABLE_NAME,COLNO";
   OCIBind *bndhp = NULL;
   sb2 ind = 0, ind_tabname, ind_colname, ind_typename, ind_charlen = OCI_IND_NOTNULL, ind_precision = OCI_IND_NOTNULL, ind_scale = OCI_IND_NOTNULL, ind_isnull, ind_key;
   OCIDefine *defnhp_tabname = NULL, *defnhp_colname = NULL, *defnhp_typename = NULL,

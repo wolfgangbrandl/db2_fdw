@@ -602,7 +602,6 @@ db2_diag (PG_FUNCTION_ARGS)
     List *options;
     ListCell *cell;
     char *nls_lang = NULL, *user = NULL, *password = NULL, *dbserver = NULL;
-    db2Session *session;
 
     /* look up foreign server with this name */
     rel = heap_open (ForeignServerRelationId, AccessShareLock);
@@ -2149,7 +2148,10 @@ db2ImportForeignSchema (ImportForeignSchemaStmt * stmt, Oid serverOid)
       case SQL_TYPE_DECIMAL:
       case SQL_TYPE_DOUBLE:
 	if (typeprec < 54)
-	  appendStringInfo (&buf, "float(%d)", typeprec);
+          if (typeprec == 0)
+	    appendStringInfo (&buf, "float(1)");
+          else
+	    appendStringInfo (&buf, "float(%d)", typeprec);
 	else
 	  appendStringInfo (&buf, "numeric");
 	break;
