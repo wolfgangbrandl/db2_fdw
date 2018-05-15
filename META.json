@@ -28,6 +28,7 @@
         "url": "http://pgxn.org/meta/spec.txt"
     },
     "tags": [
-      "DB2 Data Wrapper"
+      "DB2 Data Wrapper",
+      "foreign data wrapper"
    ]
 }
