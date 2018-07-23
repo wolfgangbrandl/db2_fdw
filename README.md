@@ -417,6 +417,30 @@ Consult the db2_fdw Wiki (https://github.com/laurenz/db2_fdw/wiki)
 for tips about DB2 installation and configuration and share your own
 knowledge there.
 
+DB2 Configuration
+-----------------
+So that the DB2 Data Wraper can connect ot DB2 the necessary DB2 catalogs have to be created.
+DB2 needs at least a database catalog. If the postgres instance User is also the db2 instance than you have a local DB2 database.
+Execute:
+db2 list database directory
+If you get a database than try:
+db2 connect to < database name>
+If that works you can continue with the Installation and configuration.
+
+If not, where is you DB2 database? Remote or locally under an other user then you hostname is "localhost".
+If it is remote try if it is possible the hostname of the remote instance can be resolved by DNS like : "host <hostname>".
+If it cannot be resolved use the ip address as remote server name.
+Find out on which port the DB2 Server is listening with:
+db2 get dbm cfg |grep SVCENAME
+If this is a number betwenn 1025 and 64000 then use this number if it is a name checkout the number in /etc/services for this name.
+Then you can configure the node:
+"db2 catalog tcpip node <any nodename you want> remote localhost server <port> "
+
+After that you configure the database on the give nodename like:
+db2 catalog database <db name> as <alias db name> at node <nodename you have defined before>
+
+
+
 6 Installation
 ==============
 
