@@ -833,7 +833,9 @@ db2GetForeignPaths (PlannerInfo * root, RelOptInfo * baserel, Oid foreigntableid
       /* expressions of a type different from this are not safe to push down into ORDER BY clauses */
       if (em_type != INT8OID && em_type != INT2OID && em_type != INT4OID && em_type != OIDOID
 	  && em_type != FLOAT4OID && em_type != FLOAT8OID && em_type != NUMERICOID && em_type != DATEOID
-	  && em_type != TIMESTAMPOID && em_type != TIMESTAMPTZOID && em_type != INTERVALOID)
+	  && em_type != TIMESTAMPOID && em_type != TIMESTAMPTZOID 
+	  && em_type != TIMEOID && em_type != TIMETZOID 
+          && em_type != INTERVALOID)
 	can_pushdown = false;
     }
 
@@ -1231,7 +1233,7 @@ db2BeginForeignScan (ForeignScanState * node, int eflags)
     paramDesc->type = exprType ((Node *) (expr->expr));
 
     if (paramDesc->type == TEXTOID || paramDesc->type == VARCHAROID
-	|| paramDesc->type == BPCHAROID || paramDesc->type == CHAROID || paramDesc->type == DATEOID || paramDesc->type == TIMESTAMPOID || paramDesc->type == TIMESTAMPTZOID)
+	|| paramDesc->type == BPCHAROID || paramDesc->type == CHAROID || paramDesc->type == DATEOID || paramDesc->type == TIMESTAMPOID || paramDesc->type == TIMESTAMPTZOID || paramDesc->type == TIMEOID || paramDesc->type == TIMETZOID)
       paramDesc->bindType = BIND_STRING;
     else
       paramDesc->bindType = BIND_NUMBER;
@@ -3826,6 +3828,13 @@ deparseExpr (db2Session * session, RelOptInfo * foreignrel, Expr * expr, const s
       break;
     case TIMESTAMPTZOID:
       appendStringInfo (&result, "(CAST (:now AS TIMESTAMP WITH TIME ZONE))");
+      break;
+    case TIMEOID:
+      appendStringInfo (&result, "(CAST (CAST (:now AS TIME WITH TIME ZONE) AS TIME))");
+      break;
+    case TIMETZOID:
+      appendStringInfo (&result, "(CAST (:now AS TIME WITH TIME ZONE))");
+      break;
     }
 
     break;
@@ -3845,6 +3854,14 @@ deparseExpr (db2Session * session, RelOptInfo * foreignrel, Expr * expr, const s
     case SVFOP_LOCALTIMESTAMP:
       initStringInfo (&result);
       appendStringInfo (&result, "(CAST (CAST (:now AS TIMESTAMP WITH TIME ZONE) AS TIMESTAMP))");
+      break;
+    case SVFOP_CURRENT_TIME:
+      initStringInfo (&result);
+      appendStringInfo (&result, "(CAST (:now AS TIME WITH TIME ZONE))");
+      break;
+    case SVFOP_LOCALTIME:
+      initStringInfo (&result);
+      appendStringInfo (&result, "(CAST (CAST (:now AS TIME WITH TIME ZONE) AS TIME))");
       break;
     default:
       return NULL;		/* don't push down other functions */
@@ -3932,6 +3949,16 @@ datumToString (Datum datum, Oid type)
     str = deparseTimestamp (datum, true);
     initStringInfo (&result);
     appendStringInfo (&result, "(CAST ('%s' AS TIMESTAMP WITH TIME ZONE))", str);
+    break;
+  case TIMEOID:
+    str = deparseTimestamp (datum, false);
+    initStringInfo (&result);
+    appendStringInfo (&result, "(CAST ('%s' AS TIME))", str);
+    break;
+  case TIMETZOID:
+    str = deparseTimestamp (datum, true);
+    initStringInfo (&result);
+    appendStringInfo (&result, "(CAST ('%s' AS TIME WITH TIME ZONE))", str);
     break;
   case INTERVALOID:
     str = deparseInterval (datum);
@@ -4196,7 +4223,7 @@ checkDataType (db2Type db2type, int scale, Oid pgtype, const char *tablename, co
 
   /* DATE and timestamps can be transformed to each other */
   if ((db2type == SQL_TYPE_DATE || db2type == SQL_TYPE_STAMP)
-      && (pgtype == DATEOID || pgtype == TIMESTAMPOID || pgtype == TIMESTAMPTZOID))
+      && (pgtype == DATEOID || pgtype == TIMESTAMPOID || pgtype == TIMESTAMPTZOID || pgtype == TIMEOID || pgtype == TIMETZOID))
     return;
 
 
@@ -4903,9 +4930,11 @@ setModifyParameters (struct paramDesc *paramList, TupleTableSlot * newslot, Tupl
       if (pgtype == DATEOID) {
 	param->value = deparseDate (datum);
 	break;			/* from switch (param->bindType) */
-      }
-      else if (pgtype == TIMESTAMPOID || pgtype == TIMESTAMPTZOID) {
+      } else if (pgtype == TIMESTAMPOID || pgtype == TIMESTAMPTZOID) {
 	param->value = deparseTimestamp (datum, (pgtype == TIMESTAMPTZOID));
+	break;			/* from switch (param->bindType) */
+      } else if (pgtype == TIMEOID || pgtype == TIMETZOID) {
+	param->value = deparseTimestamp (datum, (pgtype == TIMETZOID));
 	break;			/* from switch (param->bindType) */
       }
 
@@ -5094,6 +5123,8 @@ setSelectParameters (struct paramDesc *paramList, ExprContext * econtext)
 	param->value = deparseDate (datum);
       else if (param->type == TIMESTAMPOID || param->type == TIMESTAMPTZOID)
 	param->value = deparseTimestamp (datum, (param->type == TIMESTAMPTZOID));
+      else if (param->type == TIMEOID || param->type == TIMETZOID)
+	param->value = deparseTimestamp (datum, (param->type == TIMETZOID));
       else {
 	regproc typoutput;
 
@@ -5234,6 +5265,8 @@ convertTuple (struct DB2FdwState *fdw_state, Datum * values, bool * nulls, bool 
       case VARCHAROID:
       case TIMESTAMPOID:
       case TIMESTAMPTZOID:
+      case TIMEOID:
+      case TIMETZOID:
       case INTERVALOID:
       case NUMERICOID:
 	/* these functions require the type modifier */

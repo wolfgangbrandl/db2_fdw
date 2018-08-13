@@ -803,6 +803,11 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
       reply->cols[i - 1]->db2type = SQL_TYPE_STAMP;
       reply->cols[i - 1]->val_size = bin_size;
       break;
+    case SQLT_TIME:
+      /* TIME */
+      reply->cols[i - 1]->db2type = SQL_TYPE_TIME;
+      reply->cols[i - 1]->val_size = bin_size;
+      break;
     case SQLT_LNG:
       /* LONG */
       reply->cols[i - 1]->db2type = SQL_TYPE_BIG;
@@ -904,6 +909,15 @@ setDB2Environment (char *nls_lang)
   if (putenv ("NLS_TIMESTAMP_TZ_FORMAT=YYYY-MM-DD HH24:MI:SS.FF9TZH:TZM BC") != 0) {
     free (nls_lang);
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIMESTAMP_TZ_FORMAT cannot be set.");
+  }
+  if (putenv ("NLS_TIME_FORMAT=HH24:MI:SS.FF9 BC") != 0) {
+    free (nls_lang);
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIME_FORMAT cannot be set.");
+  }
+
+  if (putenv ("NLS_TIME_TZ_FORMAT= HH24:MI:SS.FF9TZH:TZM BC") != 0) {
+    free (nls_lang);
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2", "Environment variable NLS_TIME_TZ_FORMAT cannot be set.");
   }
 
   if (putenv ("NLS_NUMERIC_CHARACTERS=.,") != 0) {
