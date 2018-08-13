@@ -268,7 +268,10 @@ retry_connect:
 			    strlen ((char *) user),
 			    (DB2Text *) password,
 			    strlen ((char *) password), (DB2Text *) connectstring, strlen ((char *) connectstring)), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
-      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection to foreign DB2 server", db2Message);
+      db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection User: %s ", user, db2Message);
+      db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection password: %s ", password, db2Message);
+      db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection connectstring: %s ", connectstring, db2Message);
+      db2Error_d  (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection to foreign DB2 server", db2Message);
     }
 
     /* add session handle to cache */
@@ -1320,7 +1323,10 @@ db2ServerVersion (const char *connectstring, char *user, char *password, char * 
                             strlen ((char *) user),
                             (DB2Text *) password,
                             strlen ((char *) password), (DB2Text *) connectstring, strlen ((char *) connectstring)), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+    db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection User: %s ", user, db2Message);
     db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection to foreign DB2 server", db2Message);
+    db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection Password: %s ", password, db2Message);
+    db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection Connectstring: %s ", connectstring, db2Message);
   }
 
   /* get version information from remote server */
@@ -1571,13 +1577,29 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
 sword checkerr (sword status, dvoid * handle, ub4 handleType)
 {
   int length;
-  db2Message[0] = '\0';
+  char message[1024 + 1];
+  char sqlstate[5 + 1];
+  sb4 sqlcode;
+  ub4 i = 1;
 
+
+  memset (db2Message,0x00,sizeof(db2Message));
   if (status == OCI_SUCCESS_WITH_INFO || status == OCI_ERROR) {
-    OCIErrorGet (handle, (ub4) 1, NULL, &err_code, (text *) db2Message, (ub4) ERRBUFSIZE, handleType);
-    length = strlen (db2Message);
-    if (length > 0 && db2Message[length - 1] == '\n')
-      db2Message[length - 1] = '\0';
+    OCIErrorGet ( handle, 
+                  i, 
+                  (text *)sqlstate, 
+                  &sqlcode, 
+                  (text *) message, 
+                  sizeof(message), 
+                  handleType);
+    length = strlen (message);
+    if (length > 0){
+      if (message[length - 1] == '\n'){
+        strncpy (db2Message,message,length-1);
+      } else {
+        strcpy (db2Message,message);
+      }
+    }
   }
 
   if (status == OCI_SUCCESS_WITH_INFO)

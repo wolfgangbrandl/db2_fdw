@@ -5410,7 +5410,7 @@ db2Error_d (db2error sqlstate, const char *message, const char *detail)
 void
 db2Error_sd (db2error sqlstate, const char *message, const char *arg, const char *detail)
 {
-  ereport (ERROR, (errcode (to_sqlstate (sqlstate)), errmsg (message, arg), errdetail ("%s", detail)));
+  ereport (NOTICE, (errcode (to_sqlstate (sqlstate)), errmsg (message, arg), errdetail ("%s", detail)));
 }
 
 /*
