@@ -32,4 +32,4 @@ reset:
 	git reset --hard origin/master
 
 archive:
-	git archive --format zip --prefix=db2_fdw-$(RELEASE)/ --output db2_fdw-$(RELEASE).zip master
+	git archive --format zip --prefix=db2_fdw-$(RELEASE)/ --output ../db2_fdw-$(RELEASE).zip master
