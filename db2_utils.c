@@ -1247,7 +1247,10 @@ db2GetLob (db2Session * session, void *locptr, db2Type type, char **value, long 
 {
   OCILobLocator *locp = *(OCILobLocator **) locptr;
   oraub8 amount_byte, amount_char;
+  ub4 uamount_byte;
   sword result = OCI_SUCCESS;
+  sb4   errcode = 0;
+  OraText tMessage[200];
 
   /* initialize result buffer length */
   *value_len = 0;
@@ -1259,39 +1262,42 @@ db2GetLob (db2Session * session, void *locptr, db2Type type, char **value, long 
   }
 
   /* read the LOB in chunks */
-  do {
-    /* extend result buffer */
-    if (*value_len == 0)
-      *value = db2Alloc (LOB_CHUNK_SIZE + 1);
-    else
-      *value = db2Realloc (*value, *value_len + LOB_CHUNK_SIZE + 1);
+  (void) OCILobGetChunkSize (session->connp->svchp, session->envp->errhp, locp, &uamount_byte);
 
-    /*
-     * The first time round, "amount_* = 0" tells OCILobRead to read the whole LOB.
-     * On subsequent reads, the amount_* parameters are ignored.
-     * After the call, "amount_byte" contains the number of bytes read.
-     */
-    amount_byte = (oraub8) trunc;	/* ignored for CLOBs */
-    amount_char = amount_byte;	/* ignored for binary LOBs */
-    result = checkerr (OCILobRead2 (session->connp->svchp, session->envp->errhp, locp, &amount_byte, &amount_char,
-				    (oraub8) 1, (dvoid *) (*value + *value_len), (oraub8) LOB_CHUNK_SIZE,
-				    (result == OCI_NEED_DATA) ? OCI_NEXT_PIECE : OCI_FIRST_PIECE, NULL, NULL, (ub2) 0, (ub1) 0), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR);
+  amount_byte = uamount_byte;
+  /* extend result buffer */
+  *value = db2Alloc (amount_byte + 1);
 
-    if (result == OCI_ERROR) {
-      db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: OCILobRead failed to read LOB chunk", db2Message);
-    }
+  amount_char = amount_byte;	/* ignored for binary LOBs */
+  result = OCILobRead2 (
+                   session->connp->svchp, 
+                   session->envp->errhp, 
+                   locp, 
+                   &amount_byte, 
+                   &amount_char,
+		   (oraub8) 1, 
+                   (dvoid *) (*value), 
+                   amount_byte,
+                   OCI_FIRST_PIECE,
+                   NULL, NULL, (ub2) 0, (ub1) SQLCS_IMPLICIT);
 
-    /* update LOB length */
-    *value_len += (long) amount_byte;
+  (void) OCIErrorGet((dvoid *) session->envp->errhp, (ub4) 1, (text *) NULL, &errcode, tMessage, (ub4) sizeof(tMessage), (ub4) OCI_HTYPE_ERROR);
+
+  /* result = checkerr (result_debug,(dvoid *) session->envp->errhp, OCI_HTYPE_ERROR);*/
+  if (errcode) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: OCILobRead failed to read LOB chunk", (char *) tMessage);
+    db2Error_i (FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching LOB result: %d", result);
   }
-  while (result == OCI_NEED_DATA);
+
+  /* update LOB length */
+  *value_len += (long) amount_byte;
 
   /* string end for CLOBs */
   (*value)[*value_len] = '\0';
 
   /* close the LOB */
   if (checkerr (OCILobClose (session->connp->svchp, session->envp->errhp, locp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: OCILobClose failed to close LOB", db2Message);
+    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: OCILobClose failed to close LOB",  db2Message);
   }
 }
 

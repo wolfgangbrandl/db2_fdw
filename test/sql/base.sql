@@ -15,5 +15,4 @@ select * from sales;
 select * from employee a, sales b where a.lastname = b.sales_person;
 create table l_employee as select * from employee;
 select * from l_employee a, sales b where a.lastname = b.sales_person;
-
-
+select picture from EMP_PHOTO where empno='000130' and PHOTO_FORMAT='gif';

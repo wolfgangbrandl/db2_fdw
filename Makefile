@@ -2,6 +2,7 @@ EXTENSION    = db2_fdw
 EXTVERSION   = $(shell grep default_version $(EXTENSION).control | sed -e "s/default_version[[:space:]]*=[[:space:]]*'\([^']*\)'/\1/")
 MODULE_big   = db2_fdw
 OBJS         = db2_fdw.o db2_utils.o
+RELEASE      = 1.0.5
 
 DATA         = $(wildcard sql/*--*.sql)
 DOCS         = $(wildcard doc/*.md)
@@ -27,3 +28,8 @@ checkin: clean
 	git commit -m "`date`"
 	git push -u origin master
 
+reset:	
+	git reset --hard origin/master
+
+archive:
+	git archive --format zip --prefix=db2_fdw-$(RELEASE)/ --output db2_fdw-$(RELEASE).zip master
