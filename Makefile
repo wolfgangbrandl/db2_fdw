@@ -25,7 +25,8 @@ include $(PGXS)
 checkin: clean
 	git remote set-url origin git@github.com:wolfgangbrandl/db2_fdw.git
 	git add --all
-	git commit -m "`date`"
+#	git commit -m "`date`"
+	git commit -m "OCILobRead2 changed to OCILobRead"
 	git push -u origin master
 
 reset:	
