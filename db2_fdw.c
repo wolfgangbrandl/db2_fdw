@@ -2982,6 +2982,12 @@ appendAsType (StringInfoData * dest, const char *s, Oid type)
   case TIMESTAMPTZOID:
     appendStringInfo (dest, "CAST (%s AS TIMESTAMP WITH TIME ZONE)", s);
     break;
+  case TIMEOID:
+    appendStringInfo (dest, "(CAST ('%s' AS TIME))", s);
+    break;
+  case TIMETZOID:
+    appendStringInfo (dest, "(CAST ('%s' AS TIME WITH TIME ZONE))", s);
+    break;
   default:
     appendStringInfo (dest, "%s", s);
   }
@@ -2995,8 +3001,8 @@ appendAsType (StringInfoData * dest, const char *s, Oid type)
 #define canHandleType(x) ((x) == TEXTOID || (x) == CHAROID || (x) == BPCHAROID \
 			|| (x) == VARCHAROID || (x) == NAMEOID || (x) == INT8OID || (x) == INT2OID \
 			|| (x) == INT4OID || (x) == OIDOID || (x) == FLOAT4OID || (x) == FLOAT8OID \
-			|| (x) == NUMERICOID || (x) == DATEOID || (x) == TIMESTAMPOID || (x) == TIMESTAMPTZOID \
-			|| (x) == INTERVALOID)
+			|| (x) == NUMERICOID || (x) == DATEOID || (x) == TIMEOID || (x) == TIMESTAMPOID \
+			|| (x) == TIMESTAMPTZOID || (x) == INTERVALOID)
 
 /*
  * deparseExpr
@@ -4699,9 +4705,12 @@ deparseDate (Datum datum)
   /* get the parts */
   (void) j2date (DatumGetDateADT (datum) + POSTGRES_EPOCH_JDATE, &(datetime_tm.tm_year), &(datetime_tm.tm_mon), &(datetime_tm.tm_mday));
 
+  if (datetime_tm.tm_year < 0)
+    ereport (ERROR, (errcode (ERRCODE_FDW_INVALID_ATTRIBUTE_VALUE), errmsg ("BC date value cannot be stored in DB2")));
+
   initStringInfo (&s);
-  appendStringInfo (&s, "%04d-%02d-%02d 00:00:00 %s",
-		    datetime_tm.tm_year > 0 ? datetime_tm.tm_year : -datetime_tm.tm_year + 1, datetime_tm.tm_mon, datetime_tm.tm_mday, (datetime_tm.tm_year > 0) ? "AD" : "BC");
+  appendStringInfo (&s, "%04d-%02d-%02d 00:00:00",
+		    datetime_tm.tm_year > 0 ? datetime_tm.tm_year : -datetime_tm.tm_year + 1, datetime_tm.tm_mon, datetime_tm.tm_mday);
 
   return s.data;
 }
@@ -4726,18 +4735,21 @@ deparseTimestamp (Datum datum, bool hasTimezone)
   tzoffset = 0;
   (void) timestamp2tm (DatumGetTimestampTz (datum), hasTimezone ? &tzoffset : NULL, &datetime_tm, &datetime_fsec, NULL, NULL);
 
+  if (datetime_tm.tm_year < 0)
+    ereport (ERROR, (errcode (ERRCODE_FDW_INVALID_ATTRIBUTE_VALUE), errmsg ("BC date value cannot be stored in DB2")));
+
   initStringInfo (&s);
   if (hasTimezone)
-    appendStringInfo (&s, "%04d-%02d-%02d %02d:%02d:%02d.%06d%+03d:%02d %s",
+    appendStringInfo (&s, "%04d-%02d-%02d %02d:%02d:%02d.%06d%+03d:%02d",
 		      datetime_tm.tm_year > 0 ? datetime_tm.tm_year : -datetime_tm.tm_year + 1,
 		      datetime_tm.tm_mon, datetime_tm.tm_mday, datetime_tm.tm_hour,
 		      datetime_tm.tm_min, datetime_tm.tm_sec, (int32) datetime_fsec,
-		      -tzoffset / 3600, ((tzoffset > 0) ? tzoffset % 3600 : -tzoffset % 3600) / 60, (datetime_tm.tm_year > 0) ? "AD" : "BC");
+		      -tzoffset / 3600, ((tzoffset > 0) ? tzoffset % 3600 : -tzoffset % 3600) / 60);
   else
-    appendStringInfo (&s, "%04d-%02d-%02d %02d:%02d:%02d.%06d %s",
+    appendStringInfo (&s, "%04d-%02d-%02d %02d:%02d:%02d.%06d",
 		      datetime_tm.tm_year > 0 ? datetime_tm.tm_year : -datetime_tm.tm_year + 1,
 		      datetime_tm.tm_mon, datetime_tm.tm_mday, datetime_tm.tm_hour,
-		      datetime_tm.tm_min, datetime_tm.tm_sec, (int32) datetime_fsec, (datetime_tm.tm_year > 0) ? "AD" : "BC");
+		      datetime_tm.tm_min, datetime_tm.tm_sec, (int32) datetime_fsec);
 
   return s.data;
 }
