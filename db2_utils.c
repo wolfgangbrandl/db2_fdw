@@ -1253,12 +1253,6 @@ db2GetLob (db2Session * session, void *locptr, db2Type type, char **value, long 
   /* initialize result buffer length */
   *value_len = 0;
 
-  /* open the LOB */
-  /* function to open internal LOBs - for better performance */
-  if (checkerr (OCILobOpen (session->connp->svchp, session->envp->errhp, locp, OCI_FILE_READONLY), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: OCILobOpen failed to open LOB", db2Message);
-  }
-
   /* read the LOB in chunks */
   do {
     /* extend result buffer */
@@ -1295,11 +1289,6 @@ db2GetLob (db2Session * session, void *locptr, db2Type type, char **value, long 
 
   /* string end for CLOBs */
   (*value)[*value_len] = '\0';
-
-  /* close the LOB */
-  if (checkerr (OCILobClose (session->connp->svchp, session->envp->errhp, locp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: OCILobClose failed to close LOB", db2Message);
-  }
 }
 
 /*
