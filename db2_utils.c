@@ -1274,7 +1274,11 @@ db2GetLob (db2Session * session, void *locptr, db2Type type, char **value, long 
                   (ub4) 1, 
                   (dvoid *) (*value + *value_len), 
                   (ub4) LOB_CHUNK_SIZE,
-                  (result == OCI_NEED_DATA) ? OCI_NEXT_PIECE : OCI_FIRST_PIECE, NULL, (ub2) 0, (ub1) SQLCS_IMPLICIT);
+                  (dvoid *) 0, 
+                  NULL,
+                  (ub2) 0, 
+                  (ub1) SQLCS_IMPLICIT
+                  );
     result = checkerr (resultlob,(dvoid *) session->envp->errhp, OCI_HTYPE_ERROR);
 
     if (result == OCI_ERROR) {
