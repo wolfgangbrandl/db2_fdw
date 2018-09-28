@@ -566,7 +566,8 @@ If this is set to OFF the default is cursor stability.
 
 8 Problems
 ==========
-will follow.
+There is a problem running the fdw in Windows. Up to now this fdw can only run if the system local in Windows is set to English(United States). There  are problems with the representation of double,real and float with the '," sign.
+If the DB2 database is running Code Page 1252 then also the postgres db should be WIN1252.
 
 
 9 Support
