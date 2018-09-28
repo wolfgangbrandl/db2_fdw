@@ -30,7 +30,7 @@
 static int silent = 0;
 
 /* contains DB2 error messages, set by checkerr() */
-#define ERRBUFSIZE 500
+#define ERRBUFSIZE 2000
 static char db2Message[ERRBUFSIZE];
 static sb4 err_code;
 
@@ -1590,38 +1590,46 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
  */
 sword checkerr (sword status, dvoid * handle, ub4 handleType)
 {
-  int length;
   char message[1024 + 1];
+  char submessage[100];
   char sqlstate[5 + 1];
   sb4 sqlcode;
   ub4 i = 1;
 
 
   memset (db2Message,0x00,sizeof(db2Message));
-  if (status == OCI_SUCCESS_WITH_INFO || status == OCI_ERROR) {
-    OCIErrorGet ( handle, 
-                  i, 
-                  (text *)sqlstate, 
-                  &sqlcode, 
-                  (text *) message, 
-                  sizeof(message), 
-                  handleType);
-    length = strlen (message);
-    if (length > 0){
-      if (message[length - 1] == '\n'){
-        strncpy (db2Message,message,length-1);
-      } else {
-        strcpy (db2Message,message);
+  memset (submessage,0x00,sizeof(submessage));
+  memset (message,0x00,sizeof(message));
+  switch (status)
+  {
+    case OCI_SUCCESS:
+      break;
+    case OCI_INVALID_HANDLE:
+      sprintf(db2Message,"\n-CI INVALID HANDLE-----\n");
+      break;
+    case OCI_ERROR:
+      memset (submessage,0x00,sizeof(submessage));
+      memset (message,0x00,sizeof(message));
+      while (OCIErrorGet ( handle, i, (text *)sqlstate, &sqlcode, (text *) message, sizeof(message), handleType) == OCI_SUCCESS)  {
+        sprintf(submessage,"\n  SQLSTATE          = %s\n  SQLCODE = %d\n", sqlstate,sqlcode);
+        strcat (db2Message,submessage);
+        strcat (db2Message,message);
+        strcat (db2Message,"\n");
+        memset (submessage,0x00,sizeof(submessage));
+        memset (message,0x00,sizeof(message));
       }
-    }
-  }
-
-  if (status == OCI_SUCCESS_WITH_INFO)
-    status = OCI_SUCCESS;
-
-  if (status == OCI_NO_DATA) {
-    strcpy (db2Message, "SQL0100: no data found");
-    err_code = (sb4) 100;
+      break;
+    case OCI_SUCCESS_WITH_INFO:
+      status = OCI_SUCCESS;
+      break;
+    case OCI_NEED_DATA:
+      break;
+    case OCI_NO_DATA:
+      strcpy (db2Message, "SQL0100: no data found");
+      err_code = (sb4) 100;
+      break;
+    default:
+      break;
   }
 
   return status;
