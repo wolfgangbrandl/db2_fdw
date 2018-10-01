@@ -2,21 +2,12 @@ Foreign Data Wrapper for DB2 on Windows Operationg System
 =========================================================
 
 For the postgres on Windows i tested with MSYS2 and the MinGW-w64 compiler.
-https://www.msys2.org/
-
-
-db2_fdw is a PostgreSQL extension that provides a Foreign Data Wrapper for
-easy and efficient access to DB2 databases, including pushdown of WHERE
-conditions and required columns as well as comprehensive EXPLAIN support.
 
 This README contains the following sections:
 
 1. [MSYS2 Installation](#1-msys2)
 2. [MinGW-w64 Installaiton](#2-Installation of MinGW)
 3. [PostgreSQL from Source](#3-postgresql installation)
-
-db2_fdw was written by Wolfgang Brandl, with notable contributions from
-Laurenz Alba from Austria.
 
 1 MSYS2 Installation
 ====================
