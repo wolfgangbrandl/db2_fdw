@@ -40,12 +40,17 @@ In a command window of MSYS2 enter the command:
 Download one of the source tar balls, uncompressit and deploy in one of the folder you created for build.
 
 In the deployed folder execute the following command:
+    
     ./configure --host=x86_64-w64-mingw32 --prefix= < installation directory>
 like
+    
     ./configure --host=x86_64-w64-mingw32 --prefix=/c/builds/Postgres/dist
+
 Then execute
+    
     make clean all install
 and
+    
     cd contrib
     make clean all install
 
