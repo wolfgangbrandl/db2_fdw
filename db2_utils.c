@@ -1591,15 +1591,14 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
 sword checkerr (sword status, dvoid * handle, ub4 handleType)
 {
   char message[1024 + 1];
-  char submessage[100];
+  char submessage[200];
   char sqlstate[5 + 1];
   sb4 sqlcode;
   ub4 i = 1;
+  int count=0;
 
 
   memset (db2Message,0x00,sizeof(db2Message));
-  memset (submessage,0x00,sizeof(submessage));
-  memset (message,0x00,sizeof(message));
   switch (status)
   {
     case OCI_SUCCESS:
@@ -1610,11 +1609,18 @@ sword checkerr (sword status, dvoid * handle, ub4 handleType)
     case OCI_ERROR:
       memset (submessage,0x00,sizeof(submessage));
       memset (message,0x00,sizeof(message));
+      count=0;
       while (OCIErrorGet ( handle, i, (text *)sqlstate, &sqlcode, (text *) message, sizeof(message), handleType) == OCI_SUCCESS)  {
-        sprintf(submessage,"\n  SQLSTATE          = %s\n  SQLCODE = %d\n", sqlstate,sqlcode);
-        strcat (db2Message,submessage);
-        strcat (db2Message,message);
-        strcat (db2Message,"\n");
+        if(count > 2) break;
+        sprintf(submessage,"SQLSTATE = %s  SQLCODE = %d\n", sqlstate,sqlcode);
+        if ((sizeof(db2Message) - strlen(db2Message))> strlen(submessage)+1){
+          strcat (db2Message,submessage);
+        }
+        if ((sizeof(db2Message) - strlen(db2Message))> strlen(message)+2){
+          strcat (db2Message,message);
+          strcat (db2Message,"\n");
+        }
+        count++;
         memset (submessage,0x00,sizeof(submessage));
         memset (message,0x00,sizeof(message));
       }
