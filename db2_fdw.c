@@ -86,17 +86,8 @@
 #define WIDTH_THRESHOLD 1024
 #endif /* WIDTH_THRESHOLD */
 
-#if PG_VERSION_NUM < 90200
-#define OLD_FDW_API
-#else
 #undef OLD_FDW_API
-#endif /* PG_VERSION_NUM */
-
-#if PG_VERSION_NUM >= 90300
 #define WRITE_API
-#else
-#undef WRITE_API
-#endif /* PG_VERSION_NUM */
 
 #if PG_VERSION_NUM >= 90500
 #define IMPORT_API
