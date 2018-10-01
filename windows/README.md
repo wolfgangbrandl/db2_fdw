@@ -56,4 +56,5 @@ and
 
 Copy the distribution or compress it in an zip File to copy it on another Server:
 Set the environment variables in Windows PATH and generated an instanz with:
-initdb --pgdata=c:\data\pgdata105 -username=postgres --auth=trust
+
+    initdb --pgdata=c:\data\pgdata105 -username=postgres --auth=trust
