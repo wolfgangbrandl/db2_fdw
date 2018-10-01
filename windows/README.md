@@ -20,31 +20,34 @@ More detailed information will be provided on the home page.
 
 Open a MSYS2 64 Bit command window.
 For updating the packages call:
-pacman -Syu
+    
+    pacman -Syu
 
 to update the system call:
-pacman -Su
+    
+    pacman -Su
 
 
 
 2 MinGW-w64 Installaiton
 ========================
 In a command window of MSYS2 enter the command:
-pacman --needed -S git mingw-w64-x86_64-gcc base level
+     
+     pacman --needed -S git mingw-w64-x86_64-gcc base level
 
 3 PostgreSQL from Source
 ========================
 Download one of the source tar balls, uncompressit and deploy in one of the folder you created for build.
 
 In the deployed folder execute the following command:
-./configure --host=x86_64-w64-mingw32 --prefix= < installation directory>
+    ./configure --host=x86_64-w64-mingw32 --prefix= < installation directory>
 like
-./configure --host=x86_64-w64-mingw32 --prefix=/c/builds/Postgres/dist
+    ./configure --host=x86_64-w64-mingw32 --prefix=/c/builds/Postgres/dist
 Then execute
-make clean all install
+    make clean all install
 and
-cd contrib
-make clean all install
+    cd contrib
+    make clean all install
 
 Copy the distribution or compress it in an zip File to copy it on another Server:
 Set the environment variables in Windows PATH and generated an instanz with:
