@@ -5,9 +5,9 @@ For the postgres on Windows i tested with MSYS2 and the MinGW-w64 compiler.
 
 This README contains the following sections:
 
-1. [MSYS2 Installation](#1-msys2 installation)
-2. [MinGW Installation](#2-mingw installation)
-3. [PostgreSQL from Source](#3-postgresql from source)
+1. [MSYS2 Installation](#1-msys2-installation)
+2. [MinGW Installation](#2-mingw-w64-installation)
+3. [PostgreSQL from Source](#3-postgresql-from-source)
 
 1 MSYS2 Installation
 ====================
