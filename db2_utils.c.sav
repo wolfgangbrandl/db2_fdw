@@ -54,7 +54,7 @@ struct handleEntry
 /*
  * Linked list of handles for cached DB2 connections.
  */
-static struct envEntry *rootenvEntry = NULL;
+static struct envEntry *envlist = NULL;
 
 /*
  * NULL value used for "in" callback in RETURNING clauses.
@@ -63,21 +63,6 @@ static struct envEntry *rootenvEntry = NULL;
 /*
  * Helper functions
  */
-struct srvEntry * findsrvEntryHandle (struct srvEntry * start, OCIServer * srvhp);
-struct srvEntry * findsrvEntry (struct srvEntry * start, const char * connectstring);
-int deletesrvEntry(struct srvEntry * start, struct srvEntry * node);
-struct srvEntry * insertsrvEntry(struct srvEntry * start, const char * connectstring, OCIServer * srvhp);
-struct connEntry * findconnEntry(struct connEntry * start, const char * user);
-struct connEntry * findconnEntryHandle (struct connEntry * start, OCISession  * userhp);
-int deleteconnEntry(struct connEntry * start, struct connEntry * node);
-struct connEntry * insertconnEntry(struct connEntry * start, const char * user, OCISvcCtx *svchp,OCISession * userhp);
-struct envEntry * findenvEntry(struct envEntry * start, const char * nlslang);
-struct envEntry * findenvEntryHandle (struct envEntry * start, OCIEnv * envhp);
-int deleteenvEntry(struct envEntry * start, struct envEntry * node);
-int deleteenvEntryLang(struct envEntry * start, const char * nlslang);
-struct envEntry * insertenvEntry(struct envEntry * start, const char * nlslang, OCIEnv *envhp, OCIError *errhp);
-int printstruct();
-
 static void db2SetSavepoint (db2Session * session, int nest_level);
 static void setDB2Environment (char *nls_lang);
 static sword checkerr (sword status, dvoid * handle, ub4 handleType, int line, char * file);
@@ -91,319 +76,12 @@ static ub2 getDB2Type (db2Type arg);
 static sb4 bind_out_callback (void *octxp, OCIBind * bindp, ub4 iter, ub4 index, void **bufpp, ub4 ** alenp, ub1 * piecep, void **indp, ub2 ** rcodep);
 static sb4 bind_in_callback (void *ictxp, OCIBind * bindp, ub4 iter, ub4 index, void **bufpp, ub4 * alenp, ub1 * piecep, void **indpp);
 
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-struct srvEntry * findsrvEntryHandle (struct srvEntry * start, OCIServer * srvhp) 
-{
-  struct srvEntry *step;
-  for (step = start; step != NULL; step = step->right){
-    if (start->srvhp == srvhp) {
-      return step;
-    }
-  }
-  return NULL;
-}
-
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-struct srvEntry * findsrvEntry (struct srvEntry * start,const  char * connectstring) 
-{
-  struct srvEntry *step;
-  for (step = start; step != NULL; step = step->right){
-    if (strcmp (step->connectstring, connectstring) == 0) {
-      return step;
-    }
-  }
-  return NULL;
-}
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-int deletesrvEntry(struct srvEntry * start, struct srvEntry * node) 
-{ 
-  struct srvEntry *step;
-  for (step = start; step != NULL; step = step->right){
-    if (step == node) {
-      free (step->connectstring);
-      step->connectstring = NULL;
-      if (step->left == NULL && step->right == NULL){
-      } else if (step->left == NULL) {
-        step->right->left = NULL;
-      } else if (step->right == NULL) {
-        step->left->right = NULL;
-      } else {
-        step->left->right = step->right;
-        step->right->left = step->left;
-      }
-      free (step);
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-struct srvEntry * insertsrvEntry(struct srvEntry * start,const char * connectstring, OCIServer * srvhp) 
-{ 
-  struct srvEntry *step;
-  struct srvEntry *new;
-  if (start == NULL){ /* first entry in list */
-    new = malloc(sizeof(struct srvEntry));
-    new->right = new->left = NULL;
-  } else {
-    for (step = start; step->right != NULL; step = step->right){ }
-    new = malloc(sizeof(struct srvEntry));
-    step->right = new; 
-    new->left = step;
-    new->right = NULL;
-  }
-  new->connectstring = strdup(connectstring);
-  new->srvhp = srvhp;
-  new->connlist = NULL;
-  return new; 
-} 
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-struct connEntry * findconnEntry(struct connEntry * start, const char * user)
-{
-  struct connEntry *step;
-  for (step = start; step != NULL; step = step->right){
-    if (strcmp (step->user, user) == 0) {
-      return step;
-    }
-  }
-  return NULL;
-}
-
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-struct connEntry * findconnEntryHandle (struct connEntry * start, OCISession  * userhp)
-{
-  struct connEntry *step;
-  for (step = start; step != NULL; step = step->right){
-    if (step->userhp == userhp) {
-      return step;
-    }
-  }
-  return NULL;
-}
-
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-int deleteconnEntry(struct connEntry * start, struct connEntry * node)
-{
-  struct connEntry *step;
-  for (step = start; step != NULL; step = step->right){
-    if (step == node) {
-      free (step->user);
-      step->user = 0x00;
-      if (step->left == NULL && step->right == NULL){
-      } else if (step->left == NULL) {
-        step->right->left = NULL;
-      } else if (step->right == NULL) {
-        step->left->right = NULL;
-      } else {
-        step->left->right = step->right;
-        step->right->left = step->left;
-      }
-      free (step);
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-struct connEntry * insertconnEntry(struct connEntry * start, const char * user, OCISvcCtx *svchp,OCISession * userhp)
-{
-  struct connEntry *step;
-  struct connEntry *new;
-  if (start == NULL){ /* first entry in list */
-    new = malloc(sizeof(struct connEntry));
-    new->right = new->left = NULL;
-  } else {
-    for (step = start; step->right != NULL; step = step->right){ }
-    new = malloc(sizeof(struct connEntry));
-    step->right = new;
-    new->left = step;
-    new->right = NULL;
-  }
-  new->user = strdup(user);
-  new->handlelist = NULL;
-  new->xact_level = 0;
-  new->svchp = svchp;
-  new->userhp = userhp;
-  return new;
-}
-
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-struct envEntry * findenvEntry(struct envEntry * start, const char * nlslang) 
-{
-  struct envEntry *step;
-  for (step = start; step != NULL; step = step->right){
-    if (strcmp (step->nls_lang, nlslang) == 0) {
-      return step;
-    }
-  }
-  return NULL;
-}
-
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-struct envEntry * findenvEntryHandle (struct envEntry * start, OCIEnv * envhp)
-{
-  struct envEntry *step;
-  for (step = start; step != NULL; step = step->right){
-    if (step->envhp == envhp) {
-      return step;
-    }
-  }
-  return NULL;
-}
-
-
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-int deleteenvEntryLang(struct envEntry * start, const char * nlslang) 
-{ 
-  struct envEntry *step;
-  for (step = start; step != NULL; step = step->right){
-    if (strcmp (step->nls_lang, nlslang) == 0) {
-      free (step->nls_lang);
-      if (step->left == NULL && step->right == NULL){
-        rootenvEntry = NULL;
-        free (step);
-        step = NULL;
-      } else if (step->left == NULL) {
-        step->right->left = NULL;
-        free (step);
-        step = NULL;
-      } else if (step->right == NULL) {
-        step->left->right = NULL;
-        free (step);
-        step = NULL;
-      } else {
-        step->left->right = step->right;
-        step->right->left = step->left;
-        free (step);
-        step = NULL;
-      }
-      return FALSE;
-    }
-  }
-  return TRUE;
-
-}
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-int deleteenvEntry(struct envEntry * start, struct envEntry * node) 
-{ 
-  struct envEntry *step;
-  for (step = start; step != NULL; step = step->right){
-    if (step == node) {
-      free (step->nls_lang);
-      step->nls_lang = NULL;
-      if (step->left == NULL && step->right == NULL){
-        rootenvEntry = NULL;
-        free (step);
-        step = NULL;
-      } else if (step->left == NULL) {
-        step->right->left = NULL;
-        free (step);
-        step = NULL;
-      } else if (step->right == NULL) {
-        step->left->right = NULL;
-        free (step);
-        step = NULL;
-      } else {
-        step->left->right = step->right;
-        step->right->left = step->left;
-        free (step);
-        step = NULL;
-      }
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-struct envEntry * insertenvEntry(struct envEntry * start, const char * nlslang, OCIEnv *envhp, OCIError *errhp) 
-{ 
-  struct envEntry *step;
-  struct envEntry *new;
-  if (start == NULL){ /* first entry in list */
-    new = malloc(sizeof(struct envEntry));
-    new->right = new->left = NULL; 
-  } else {
-    for (step = start; step->right != NULL; step = step->right){ }
-    new = malloc(sizeof(struct envEntry));
-    step->right = new; 
-    new->left = step;
-    new->right = NULL;
-  }
-  new->nls_lang = strdup(nlslang);
-  new->envhp = envhp;
-  new->errhp = errhp;
-  new->srvlist = NULL;
-  return new; 
-} 
-/**************************************************************************************************/
-/**************************************************************************************************/
-/**************************************************************************************************/
-int printstruct()
-{
-  struct envEntry *envstep;
-  struct srvEntry *srvstep;
-  struct connEntry *constep;
-  for (envstep = rootenvEntry; envstep != NULL; envstep = envstep->right){
-    db2Debug2("EnvEntry: %x\n",envstep);
-    db2Debug2("  nls_lang: %s\n",envstep->nls_lang);
-    db2Debug2("  step->*envhp:%x\n",envstep->envhp);
-    db2Debug2("  step->*errhp:%x\n",envstep->errhp);
-    db2Debug2("  srvEntry step->*srvlist:%x\n",envstep->srvlist);
-    db2Debug2("  step->*left:%x\n",envstep->left);
-    db2Debug2("  step->*right:%x\n",envstep->right);
-    for (srvstep = envstep->srvlist; srvstep != NULL; srvstep = srvstep->right){
-      db2Debug2("    connectstring:%s\n",srvstep->connectstring);
-      db2Debug2("    *srvhp:%x\n",srvstep->srvhp);
-      db2Debug2("    *connlist:%x\n",srvstep->connlist);
-      db2Debug2("    *left:%x\n",srvstep->left);
-      db2Debug2("    *right:%x\n",srvstep->right);
-      for (constep = srvstep->connlist; constep != NULL; constep = constep->right){
-        db2Debug2("      user:%s\n",constep->user);
-        db2Debug2("      *svchp:%x\n",constep->svchp);
-        db2Debug2("      *userhp:%x\n",constep->userhp);
-        db2Debug2("      *handlelist:%x\n",constep->handlelist);
-        db2Debug2("      xact_level:%d\n",constep->xact_level);
-        db2Debug2("      struct connEntry *left:%x\n",constep->left);
-        db2Debug2("      struct connEntry *right:%x\n",constep->right);
-
-      }
-    }
-  }
-  return FALSE;
-}
-/**************************************************************************************************/
-/* db2GetSession */
-/* 		Look up an DB2 connection in the cache, create a new one if there is none. */
-/* 		The result is a palloc'ed data structure containing the connection. */
-/* 		"curlevel" is the current PostgreSQL transaction level. */
-/**************************************************************************************************/
+/*
+ * db2GetSession
+ * 		Look up an DB2 connection in the cache, create a new one if there is none.
+ * 		The result is a palloc'ed data structure containing the connection.
+ * 		"curlevel" is the current PostgreSQL transaction level.
+ */
 db2Session * db2GetSession (const char *connectstring, char *user, char *password, const char *nls_lang, const char *tablename, int curlevel)
 {
   OCIEnv *envhp = NULL;
@@ -418,44 +96,42 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
   struct connEntry *connp;
   char *nlscopy = NULL;
   ub4 is_connected;
+  int retry = 1;
 
   /* it's easier to deal with empty strings */
-  if (!connectstring) connectstring = "";
-  if (!user) user = "";
-  if (!password) password = "";
-  if (!nls_lang) nls_lang = "";
- /* search environment and server handle in cache */
-  envp = findenvEntry (rootenvEntry,nls_lang);
-  if (envp) {
-    envhp = envp->envhp;
-    errhp = envp->errhp;
-    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & srvhp, (ub4) OCI_HTYPE_SERVER, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
-      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIHandleAlloc failed to allocate server handle", db2Message);
-       /* free error handle */
-      if (checkerr (OCIHandleFree( errhp, OCI_HTYPE_ERROR),(dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free error handle","%s", db2Message);
-      }
+  if (!connectstring)
+    connectstring = "";
+  if (!user)
+    user = "";
+  if (!password)
+    password = "";
+  if (!nls_lang)
+    nls_lang = "";
 
-      /* free environment handle */
-      if (checkerr (OCIHandleFree( envhp, OCI_HTYPE_ENV),(dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
-        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free environment handle","%s", db2Message);
-      }
-      deleteenvEntryLang(rootenvEntry, nls_lang);
-      envp = NULL;
-    } /* check of handle not ok */
+  /* search environment and server handle in cache */
+  for (envp = envlist; envp != NULL; envp = envp->next) {
+    if (strcmp (envp->nls_lang, nls_lang) == 0) {
+      envhp = envp->envhp;
+      errhp = envp->errhp;
+      break;
+    }
   }
-  if (envp == NULL) {
-    /* Create environment and error handle.  */
+
+  if (envhp == NULL) {
+    /*
+     * Create environment and error handle.
+     */
 
     /* create persistent copy of "nls_lang" */
     if ((nlscopy = strdup (nls_lang)) == NULL)
-      db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %d bytes of memory", strlen (nls_lang) + 1);
+      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", strlen (nls_lang) + 1);
 
     /* set DB2 environment */
     setDB2Environment (nlscopy);
 
     /* create environment handle */
-    if (checkerr (OCIEnvCreate ((OCIEnv **) & envhp, (ub4) OCI_OBJECT, (dvoid *) 0, (dvoid * (*)(dvoid *, size_t)) 0,
+    if (checkerr (OCIEnvCreate ((OCIEnv **) & envhp, (ub4) OCI_OBJECT,
+				(dvoid *) 0, (dvoid * (*)(dvoid *, size_t)) 0,
 				(dvoid * (*)(dvoid *, dvoid *, size_t)) 0, (void (*)(dvoid *, dvoid *)) 0, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != 0) {
       free (nlscopy);
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIEnvCreate failed to create environment handle", db2Message);
@@ -478,20 +154,32 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
     }
 
     /* add handles to cache */
-    envp = insertenvEntry(rootenvEntry,nlscopy,envhp,errhp);
-    if (envp  == NULL) {
-      db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %d bytes of memory", sizeof (struct envEntry));
+    if ((envp = malloc (sizeof (struct envEntry))) == NULL) {
+      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", sizeof (struct envEntry));
     }
-    if ( rootenvEntry == NULL) {
-      rootenvEntry = envp;
-    }
+
+    envp->nls_lang = nlscopy;
+    envp->envhp = envhp;
+    envp->errhp = errhp;
+    envp->srvlist = NULL;
+    envp->next = envlist;
+    envlist = envp;
   }
 
   /* search connect string in cache */
-  srvp = findsrvEntry (envp->srvlist,connectstring);
+  for (srvp = envp->srvlist; srvp != NULL; srvp = srvp->next) {
+    if (strcmp (srvp->connectstring, connectstring) == 0) {
+      srvhp = srvp->srvhp;
+      break;
+    }
+  }
+
   if (srvp != NULL) {
-    srvhp = srvp->srvhp;
-    /* Test if we are still connected.  If not, clean up the mess.  */
+    /*
+     * Test if we are still connected.
+     * If not, clean up the mess.
+     */
+
     if (checkerr (OCIAttrGet ((dvoid *) srvhp, (ub4) OCI_HTYPE_SERVER,
 			      (dvoid *) & is_connected, (ub4 *) 0, (ub4) OCI_ATTR_SERVER_STATUS, errhp), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error connecting to DB2: OCIAttrGet failed to get connection status", db2Message);
@@ -510,6 +198,7 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
     }
   }
 
+retry_connect:
   if (srvp == NULL) {
     /*
      * No cache entry was found, we have to create a new server connection.
@@ -523,26 +212,31 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
     /* connect to the DB2 server */
     if (checkerr (OCIServerAttach (srvhp, errhp, (text *) connectstring, strlen (connectstring), 0), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       if (tablename)
-	db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "connection for foreign table"," <%s> cannot be established. %s", tablename, db2Message);
+	db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "connection for foreign table \"%s\" cannot be established", tablename, db2Message);
       else
 	db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot connect to foreign DB2 server", db2Message);
     }
 
     /* add server handle to cache */
-    envp->srvlist  = srvp = insertsrvEntry (envp->srvlist,connectstring,srvhp);
-    if (srvp == NULL) {
-      db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %d bytes of memory", sizeof (struct srvEntry));
+    if ((srvp = malloc (sizeof (struct srvEntry))) == NULL) {
+      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", sizeof (struct srvEntry));
     }
+    if ((srvp->connectstring = strdup (connectstring)) == NULL) {
+      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", strlen (connectstring) + 1);
+    }
+    srvp->srvhp = srvhp;
+    srvp->next = envp->srvlist;
+    srvp->connlist = NULL;
+    envp->srvlist = srvp;
   }
 
   /* search user session for this server in cache */
-  connp = findconnEntry(srvp->connlist,user);
-  if (connp) {
-    svchp = connp->svchp;
-    userhp = connp->userhp;
-  } else {
-    svchp = NULL;
-    userhp =  NULL;
+  for (connp = srvp->connlist; connp != NULL; connp = connp->next) {
+    if (strcmp (connp->user, user) == 0) {
+      svchp = connp->svchp;
+      userhp = connp->userhp;
+      break;
+    }
   }
 
   if (userhp == NULL) {
@@ -574,25 +268,59 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
 			    strlen ((char *) user),
 			    (DB2Text *) password,
 			    strlen ((char *) password), (DB2Text *) connectstring, strlen ((char *) connectstring)), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
-      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection User: %s ,%s", user, db2Message);
-      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection password: %s ,%s", password, db2Message);
-      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection connectstring: %s ,%s", connectstring, db2Message);
-      db2Error_d  (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection to foreign DB2 server,%s", db2Message);
+      db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection User: %s ", user, db2Message);
+      db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection password: %s ", password, db2Message);
+      db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection connectstring: %s ", connectstring, db2Message);
+      db2Error_d  (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection to foreign DB2 server", db2Message);
     }
-    envp->srvlist->connlist = connp = insertconnEntry (srvp->connlist,user,svchp,userhp);
+
     /* add session handle to cache */
+    if ((connp = malloc (sizeof (struct connEntry))) == NULL) {
+      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", sizeof (struct connEntry));
+    }
+    if ((connp->user = strdup (user)) == NULL) {
+      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", sizeof (strlen (user) + 1));
+    }
+    connp->svchp = svchp;
+    connp->userhp = userhp;
+    connp->geomtype = NULL;
+    connp->handlelist = NULL;
+    connp->xact_level = 0;
+    connp->next = srvp->connlist;
+    srvp->connlist = connp;
 
     /* register callback for PostgreSQL transaction events */
     db2RegisterCallback (connp);
   }
-  printstruct();
+
   if (connp->xact_level <= 0) {
     db2Debug2 ("db2_fdw: begin serializable remote transaction");
 
     /* start a read-only or "serializable" (= repeatable read) transaction */
     if (checkerr (OCITransStart (svchp, errhp, (uword) 0, OCI_TRANS_SERIALIZABLE), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
+      /*
+       * Certain DB2 errors mean that the session or the server connection
+       * got terminated.  Retry once in that case.
+       */
+      if (retry && (err_code == 1012 || err_code == 28 || err_code == 3113 || err_code == 3135)) {
+	db2Debug2 ("db2_fdw: session has been terminated, try to reconnect");
+
+	silent = 1;
+	while (srvp->connlist != NULL) {
+	  closeSession (envhp, srvhp, srvp->connlist->userhp, 0);
+	}
+	disconnectServer (envhp, srvhp);
+	silent = 0;
+	srvp = NULL;
+	userhp = NULL;
+
+	retry = 0;
+	goto retry_connect;
+      }
+      else
 	db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCITransStart failed to start a transaction", db2Message);
     }
+
     connp->xact_level = 1;
   }
 
@@ -631,14 +359,14 @@ db2CloseStatement (db2Session * session)
 void
 db2CloseConnections (void)
 {
-  while (rootenvEntry != NULL) {
-    while (rootenvEntry->srvlist != NULL) {
-      while (rootenvEntry->srvlist->connlist != NULL) {
-	closeSession (rootenvEntry->envhp, rootenvEntry->srvlist->srvhp, rootenvEntry->srvlist->connlist->userhp, 0);
+  while (envlist != NULL) {
+    while (envlist->srvlist != NULL) {
+      while (envlist->srvlist->connlist != NULL) {
+	closeSession (envlist->envhp, envlist->srvlist->srvhp, envlist->srvlist->connlist->userhp, 0);
       }
-      disconnectServer (rootenvEntry->envhp, rootenvEntry->srvlist->srvhp);
+      disconnectServer (envlist->envhp, envlist->srvlist->srvhp);
     }
-    removeEnvironment (rootenvEntry->envhp);
+    removeEnvironment (envlist->envhp);
   }
 }
 
@@ -671,8 +399,8 @@ db2Cancel (void)
   struct srvEntry *srvp;
 
   /* send a cancel request for all servers ignoring errors */
-  for (envp = rootenvEntry; envp != NULL; envp = envp->right)
-    for (srvp = envp->srvlist; srvp != NULL; srvp = srvp->right)
+  for (envp = envlist; envp != NULL; envp = envp->next)
+    for (srvp = envp->srvlist; srvp != NULL; srvp = srvp->next)
       (void) OCIBreak (srvp->srvhp, envp->errhp);
 }
 
@@ -695,7 +423,7 @@ db2EndTransaction (void *arg, int is_commit, int noerror)
     return;
 
   /* find the cached handles for the argument */
-  envp = rootenvEntry;
+  envp = envlist;
   while (envp) {
     srvp = envp->srvlist;
     while (srvp) {
@@ -705,15 +433,15 @@ db2EndTransaction (void *arg, int is_commit, int noerror)
 	  found = 1;
 	  break;
 	}
-	connp = connp->right;
+	connp = connp->next;
       }
       if (found)
 	break;
-      srvp = srvp->right;
+      srvp = srvp->next;
     }
     if (found)
       break;
-    envp = envp->right;
+    envp = envp->next;
   }
 
   if (!found)
@@ -777,7 +505,7 @@ db2EndSubtransaction (void *arg, int nest_level, int is_commit)
   }
 
   /* find the cached handles for the argument */
-  envp = rootenvEntry;
+  envp = envlist;
   while (envp) {
     srvp = envp->srvlist;
     while (srvp) {
@@ -787,15 +515,15 @@ db2EndSubtransaction (void *arg, int nest_level, int is_commit)
 	  found = 1;
 	  break;
 	}
-	connp = connp->right;
+	connp = connp->next;
       }
       if (found)
 	break;
-      srvp = srvp->right;
+      srvp = srvp->next;
     }
     if (found)
       break;
-    envp = envp->right;
+    envp = envp->next;
   }
 
   if (!found)
@@ -896,8 +624,8 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
   if (checkerr (OCIStmtExecute (session->connp->svchp, stmthp, session->envp->errhp, (ub4) 0, (ub4) 0,
 				(CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DESCRIBE_ONLY), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
     if (err_code == 942)
-      db2Error_d (FDW_TABLE_NOT_FOUND, "table not found",
-		     "DB2 table %s for foreign table \"%s\" does not exist or does not allow read access;%s,%s", tablename, pgname,
+      db2Error_ssdh (FDW_TABLE_NOT_FOUND,
+		     "DB2 table %s for foreign table \"%s\" does not exist or does not allow read access", tablename, pgname,
 		     db2Message, "DB2 table names are case sensitive (normally all uppercase).");
     else
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIStmtExecute failed to describe table", db2Message);
@@ -1608,36 +1336,36 @@ db2ServerVersion (const char *connectstring, char *user, char *password, char * 
                             strlen ((char *) user),
                             (DB2Text *) password,
                             strlen ((char *) password), (DB2Text *) connectstring, strlen ((char *) connectstring)), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection User: %s %s", user, db2Message);
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection to foreign DB2 server %s", db2Message);
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection Password: %s %s", password, db2Message);
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection Connectstring: %s %s", connectstring, db2Message);
+    db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection User: %s ", user, db2Message);
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection to foreign DB2 server", db2Message);
+    db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection Password: %s ", password, db2Message);
+    db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection Connectstring: %s ", connectstring, db2Message);
   }
 
   /* get version information from remote server */
   if (checkerr (OCIServerVersion (svchp, errhp, vers, len, OCI_HTYPE_SVCCTX ), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error getting server version:"," OCIServerVersion failed to retrieve version", db2Message);
+    db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error getting server version: OCIServerVersion failed to retrieve version", db2Message);
   }
 
   strcpy (version,(char *)vers);
   /* disconnect from the database */
   if (checkerr ( OCILogoff( svchp, errhp ), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot Logoff from DB2 server","%s", db2Message);
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot Logoff from DB2 server", db2Message);
   }
 
   /* free connection handle */
   if (checkerr (OCIHandleFree( svchp, OCI_HTYPE_SVCCTX ), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free connection Handle","%s", db2Message);
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free connection Handle", db2Message);
   }
 
   /* free error handle */
   if (checkerr (OCIHandleFree( errhp, OCI_HTYPE_ERROR),(dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free error handle","%s", db2Message);
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free error handle", db2Message);
   }
 
   /* free environment handle */
   if (checkerr (OCIHandleFree( envhp, OCI_HTYPE_ENV),(dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free environment handle","%s", db2Message);
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free environment handle", db2Message);
   }
 
   (void)OCITerminate( OCI_DEFAULT );
@@ -1960,31 +1688,48 @@ void closeSession (OCIEnv * envhp, OCIServer * srvhp, OCISession * userhp, int d
 {
   struct envEntry *envp;
   struct srvEntry *srvp;
-  struct connEntry *connp;
+  struct connEntry *connp, *prevconnp = NULL;
   OCITrans *txnhp = NULL;
 
   /* search environment handle in cache */
-  envp = findenvEntryHandle (rootenvEntry,envhp);
+  for (envp = envlist; envp != NULL; envp = envp->next) {
+    if (envp->envhp == envhp)
+      break;
+  }
 
   if (envp == NULL) {
-    if (silent) return;
-    else db2Error (FDW_ERROR, "closeSession internal error: environment handle not found in cache");
+    if (silent)
+      return;
+    else
+      db2Error (FDW_ERROR, "closeSession internal error: environment handle not found in cache");
   }
 
   /* search server handle in cache */
-  srvp = findsrvEntryHandle (envp->srvlist,srvhp);
+  for (srvp = envp->srvlist; srvp != NULL; srvp = srvp->next) {
+    if (srvp->srvhp == srvhp)
+      break;
+  }
 
   if (srvp == NULL) {
-    if (silent) return;
-    else db2Error (FDW_ERROR, "closeSession internal error: server handle not found in cache");
+    if (silent)
+      return;
+    else
+      db2Error (FDW_ERROR, "closeSession internal error: server handle not found in cache");
   }
 
   /* search connection in cache */
-  connp = findconnEntryHandle (srvp->connlist,userhp);
+  for (connp = srvp->connlist; connp != NULL; connp = connp->next) {
+    if (connp->userhp == userhp)
+      break;
+
+    prevconnp = connp;
+  }
 
   if (connp == NULL) {
-    if (silent) return;
-    else db2Error (FDW_ERROR, "closeSession internal error: user handle not found in cache");
+    if (silent)
+      return;
+    else
+      db2Error (FDW_ERROR, "closeSession internal error: user handle not found in cache");
   }
 
   /* terminate the session */
@@ -2008,19 +1753,21 @@ void closeSession (OCIEnv * envhp, OCIServer * srvhp, OCISession * userhp, int d
   (void) OCIHandleFree ((dvoid *) txnhp, OCI_HTYPE_TRANS);
 
   /* remove the session handle from the cache */
-  deleteconnEntry(srvp->connlist, connp);
-  srvp->connlist = NULL;
+  if (prevconnp == NULL)
+    srvp->connlist = connp->next;
+  else
+    prevconnp->next = connp->next;
 
   /* close the server session if desired and this is the last session */
-  if (disconnect && srvp->left->connlist == NULL)
+  if (disconnect && srvp->connlist == NULL)
     disconnectServer (envhp, srvhp);
 
   /* unregister callback for rolled back transactions */
   db2UnregisterCallback (connp);
 
   /* free the memory */
-/*  free (connp->user);
-  free (connp);*/
+  free (connp->user);
+  free (connp);
 }
 
 /*
@@ -2030,21 +1777,34 @@ void closeSession (OCIEnv * envhp, OCIServer * srvhp, OCISession * userhp, int d
 void disconnectServer (OCIEnv * envhp, OCIServer * srvhp)
 {
   struct envEntry *envp;
-  struct srvEntry *srvp;
+  struct srvEntry *srvp, *prevsrvp = NULL;
 
   /* search environment handle in cache */
-  envp = findenvEntryHandle (rootenvEntry,envhp);
+  for (envp = envlist; envp != NULL; envp = envp->next) {
+    if (envp->envhp == envhp)
+      break;
+  }
+
   if (envp == NULL) {
-    if (silent) return;
-    else db2Error (FDW_ERROR, "disconnectServer internal error: environment handle not found in cache");
+    if (silent)
+      return;
+    else
+      db2Error (FDW_ERROR, "disconnectServer internal error: environment handle not found in cache");
   }
 
   /* search server handle in cache */
-  srvp = findsrvEntryHandle (envp->srvlist,srvhp);
+  for (srvp = envp->srvlist; srvp != NULL; srvp = srvp->next) {
+    if (srvp->srvhp == srvhp)
+      break;
+
+    prevsrvp = srvp;
+  }
 
   if (srvp == NULL) {
-    if (silent) return;
-    else db2Error (FDW_ERROR, "disconnectServer internal error: server handle not found in cache");
+    if (silent)
+      return;
+    else
+      db2Error (FDW_ERROR, "disconnectServer internal error: server handle not found in cache");
   }
 
   /* disconnect server */
@@ -2056,8 +1816,14 @@ void disconnectServer (OCIEnv * envhp, OCIServer * srvhp)
   (void) OCIHandleFree ((dvoid *) srvp->srvhp, OCI_HTYPE_SERVER);
 
   /* remove server entry from the linked list */
-  deletesrvEntry(envp->srvlist,srvp);
-  envp->srvlist = NULL;
+  if (prevsrvp == NULL)
+    envp->srvlist = srvp->next;
+  else
+    prevsrvp->next = srvp->next;
+
+  /* free the memory */
+  free (srvp->connectstring);
+  free (srvp);
 }
 
 /*
@@ -2066,10 +1832,15 @@ void disconnectServer (OCIEnv * envhp, OCIServer * srvhp)
  */
 void removeEnvironment (OCIEnv * envhp)
 {
-  struct envEntry *envp;
+  struct envEntry *envp, *prevenvp = NULL;
 
   /* search environment handle in cache */
-  envp = findenvEntryHandle (rootenvEntry,envhp);
+  for (envp = envlist; envp != NULL; envp = envp->next) {
+    if (envp->envhp == envhp)
+      break;
+
+    prevenvp = envp;
+  }
 
   if (envp == NULL) {
     if (silent)
@@ -2085,8 +1856,14 @@ void removeEnvironment (OCIEnv * envhp)
   (void) OCIHandleFree ((dvoid *) envp->envhp, OCI_HTYPE_ENV);
 
   /* remove environment entry from the linked list */
-  deleteenvEntry(rootenvEntry,envp);
-  envp = NULL;
+  if (prevenvp == NULL)
+    envlist = envp->next;
+  else
+    prevenvp->next = envp->next;
+
+  /* free the memory */
+  free (envp->nls_lang);
+  free (envp);
 }
 
 /*
@@ -2098,11 +1875,10 @@ void allocHandle (dvoid ** handlepp, ub4 type, int isDescriptor, OCIEnv * envhp,
 {
   struct handleEntry *entry;
   sword rc;
-  printstruct();
 
   /* create entry for linked list */
   if ((entry = malloc (sizeof (struct handleEntry))) == NULL) {
-    db2Error_d (FDW_OUT_OF_MEMORY, "error allocating handle:"," failed to allocate %d bytes of memory", sizeof (struct handleEntry));
+    db2Error_i (FDW_OUT_OF_MEMORY, "error allocating handle: failed to allocate %d bytes of memory", sizeof (struct handleEntry));
   }
 
   if (isDescriptor)

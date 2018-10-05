@@ -27,18 +27,19 @@ struct connEntry
   char *user;
   OCISvcCtx *svchp;
   OCISession *userhp;
-  OCIType *geomtype;
   struct handleEntry *handlelist;
   int xact_level;		/* 0 = none, 1 = main, else subtransaction */
-  struct connEntry *next;
+  struct connEntry *left;
+  struct connEntry *right;
 };
 
 struct srvEntry
 {
   char *connectstring;
   OCIServer *srvhp;
-  struct srvEntry *next;
   struct connEntry *connlist;
+  struct srvEntry *left;
+  struct srvEntry *right;
 };
 
 struct envEntry
@@ -46,8 +47,9 @@ struct envEntry
   char *nls_lang;
   OCIEnv *envhp;
   OCIError *errhp;
-  struct envEntry *next;
   struct srvEntry *srvlist;
+  struct envEntry *left;
+  struct envEntry *right;
 };
 typedef unsigned char DB2Text;
 /*
@@ -188,10 +190,6 @@ extern void *db2Alloc (size_t size);
 extern void *db2Realloc (void *p, size_t size);
 extern void db2Free (void *p);
 extern void db2SetHandlers (void);
-extern void db2Error_d (db2error sqlstate, const char *message, const char *detail);
-extern void db2Error_sd (db2error sqlstate, const char *message, const char *arg, const char *detail);
-extern void db2Error_ssdh (db2error sqlstate, const char *message, const char *arg1, const char *arg2, const char *detail, const char *hint);
-extern void db2Error_ii (db2error sqlstate, const char *message, int arg1, int arg2);
-extern void db2Error_i (db2error sqlstate, const char *message, int arg);
+extern void db2Error_d (db2error sqlstate, const char *message, const char *detail, ...);
 extern void db2Error (db2error sqlstate, const char *message);
-extern void db2Debug2 (const char *message);
+extern void db2Debug2 (const char *message,...);
