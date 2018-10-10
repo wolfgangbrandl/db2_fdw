@@ -568,6 +568,7 @@ If this is set to OFF the default is cursor stability.
 ==========
 There is a problem running the fdw in Windows. Up to now this fdw can only run if the system local in Windows is set to English(United States). There  are problems with the representation of double,real and float with the '," sign.
 If the DB2 database is running Code Page 1252 then also the postgres db should be WIN1252.
+Up to now it is not possible to get the XML data type with the OCI db2 functions. Perhaps the odbc driver is more compatible for this feature.
 
 
 9 Support

@@ -193,3 +193,6 @@ extern void db2SetHandlers (void);
 extern void db2Error_d (db2error sqlstate, const char *message, const char *detail, ...);
 extern void db2Error (db2error sqlstate, const char *message);
 extern void db2Debug2 (const char *message,...);
+extern void db2Debug3 (const char *message,...);
+extern void db2Debug4 (const char *message,...);
+extern void db2Debug5 (const char *message,...);

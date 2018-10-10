@@ -1991,6 +1991,9 @@ db2ImportForeignSchema (ImportForeignSchemaStmt * stmt, Oid serverOid)
 	else
 	  appendStringInfo (&buf, "numeric");
 	break;
+      case SQL_TYPE_XML:
+	appendStringInfo (&buf, "bytea");
+	break;
       case SQL_TYPE_BLOB:
 	appendStringInfo (&buf, "bytea");
 	break;
@@ -4013,8 +4016,11 @@ getUsedColumns (Expr * expr, struct db2Table *db2Table)
 void
 checkDataType (db2Type db2type, int scale, Oid pgtype, const char *tablename, const char *colname)
 {
+  db2Debug2("checkDataType: db2type: %d   pgtype: %d",db2type,pgtype);
   /* the binary DB2 types can be converted to bytea */
   if (db2type == SQL_TYPE_BLOB && pgtype == BYTEAOID)
+    return;
+  if (db2type == SQL_TYPE_XML && pgtype == BYTEAOID)
     return;
 
 
@@ -4819,23 +4825,17 @@ void
 transactionCallback (XactEvent event, void *arg)
 {
   switch (event) {
-#ifdef WRITE_API
   case XACT_EVENT_PRE_COMMIT:
-#if PG_VERSION_NUM >= 90500
   case XACT_EVENT_PARALLEL_PRE_COMMIT:
-#endif /* PG_VERSION_NUM */
     /* remote commit */
     db2EndTransaction (arg, 1, 0);
     break;
   case XACT_EVENT_PRE_PREPARE:
     ereport (ERROR, (errcode (ERRCODE_FDW_UNABLE_TO_CREATE_EXECUTION), errmsg ("cannot prepare a transaction that used remote tables")));
     break;
-#endif /* WRITE_API */
   case XACT_EVENT_COMMIT:
   case XACT_EVENT_PREPARE:
-#if PG_VERSION_NUM >= 90500
   case XACT_EVENT_PARALLEL_COMMIT:
-#endif /* PG_VERSION_NUM */
     /*
      * Commit the remote transaction ignoring errors.
      * In 9.3 or higher, the transaction must already be closed, so this does nothing.
@@ -4844,9 +4844,7 @@ transactionCallback (XactEvent event, void *arg)
     db2EndTransaction (arg, 1, 1);
     break;
   case XACT_EVENT_ABORT:
-#if PG_VERSION_NUM >= 90500
   case XACT_EVENT_PARALLEL_ABORT:
-#endif /* PG_VERSION_NUM */
     /* remote rollback */
     db2EndTransaction (arg, 0, 1);
     break;
@@ -5276,18 +5274,45 @@ db2Error (db2error sqlstate, const char *message)
   }
 }
 
-/*
- *  * db2Debug2
- *   * 		Report a PostgreSQL message at level DEBUG2.
- *    */
-void
-db2Debug2 (const char *message, ...)
+/********************************************************************************/
+/********************************************************************************/
+/*   db2Debug2,debug3 4 5                                                       */
+/*   Report a PostgreSQL message at level DEBUG2.                               */
+/********************************************************************************/
+void db2Debug2 (const char *message, ...)
 {
-  char cBuffer [4000];
-  va_list arg_marker;
-  va_start (arg_marker, message);
-  vsprintf (cBuffer, message, arg_marker);
-  elog (DEBUG2, "%s", cBuffer);
-  va_end   (arg_marker);
+char cBuffer [4000];
+va_list arg_marker;
+va_start (arg_marker, message);
+vsprintf (cBuffer, message, arg_marker);
+elog (DEBUG2, "%s", cBuffer);
+va_end   (arg_marker);
 }
 
+void db2Debug3 (const char *message, ...)
+{
+char cBuffer [4000];
+va_list arg_marker;
+va_start (arg_marker, message);
+vsprintf (cBuffer, message, arg_marker);
+elog (DEBUG3, "%s", cBuffer);
+va_end   (arg_marker);
+}
+void db2Debug4 (const char *message, ...)
+{
+char cBuffer [4000];
+va_list arg_marker;
+va_start (arg_marker, message);
+vsprintf (cBuffer, message, arg_marker);
+elog (DEBUG4, "%s", cBuffer);
+va_end   (arg_marker);
+}
+void db2Debug5 (const char *message, ...)
+{
+char cBuffer [4000];
+va_list arg_marker;
+va_start (arg_marker, message);
+vsprintf (cBuffer, message, arg_marker);
+elog (DEBUG5, "%s", cBuffer);
+va_end   (arg_marker);
+}

@@ -370,28 +370,31 @@ int printstruct()
   struct envEntry *envstep;
   struct srvEntry *srvstep;
   struct connEntry *constep;
+  char szBuffer[1000];
+  sprintf(szBuffer,"before calling pthread_create getpid: %d getpthread_self: %lu",getpid(), pthread_self());
+  db2Debug5("printstruct for: %s",szBuffer);
   for (envstep = rootenvEntry; envstep != NULL; envstep = envstep->right){
-    db2Debug2("EnvEntry: %x\n",envstep);
-    db2Debug2("  nls_lang: %s\n",envstep->nls_lang);
-    db2Debug2("  step->*envhp:%x\n",envstep->envhp);
-    db2Debug2("  step->*errhp:%x\n",envstep->errhp);
-    db2Debug2("  srvEntry step->*srvlist:%x\n",envstep->srvlist);
-    db2Debug2("  step->*left:%x\n",envstep->left);
-    db2Debug2("  step->*right:%x\n",envstep->right);
+    db2Debug5("EnvEntry: %x",envstep);
+    db2Debug5("  nls_lang: %s",envstep->nls_lang);
+    db2Debug5("  step->*envhp:%x",envstep->envhp);
+    db2Debug5("  step->*errhp:%x",envstep->errhp);
+    db2Debug5("  srvEntry step->*srvlist:%x",envstep->srvlist);
+    db2Debug5("  step->*left:%x",envstep->left);
+    db2Debug5("  step->*right:%x",envstep->right);
     for (srvstep = envstep->srvlist; srvstep != NULL; srvstep = srvstep->right){
-      db2Debug2("    connectstring:%s\n",srvstep->connectstring);
-      db2Debug2("    *srvhp:%x\n",srvstep->srvhp);
-      db2Debug2("    *connlist:%x\n",srvstep->connlist);
-      db2Debug2("    *left:%x\n",srvstep->left);
-      db2Debug2("    *right:%x\n",srvstep->right);
+      db2Debug5("    connectstring:%s",srvstep->connectstring);
+      db2Debug5("    *srvhp:%x",srvstep->srvhp);
+      db2Debug5("    *connlist:%x",srvstep->connlist);
+      db2Debug5("    *left:%x",srvstep->left);
+      db2Debug5("    *right:%x",srvstep->right);
       for (constep = srvstep->connlist; constep != NULL; constep = constep->right){
-        db2Debug2("      user:%s\n",constep->user);
-        db2Debug2("      *svchp:%x\n",constep->svchp);
-        db2Debug2("      *userhp:%x\n",constep->userhp);
-        db2Debug2("      *handlelist:%x\n",constep->handlelist);
-        db2Debug2("      xact_level:%d\n",constep->xact_level);
-        db2Debug2("      struct connEntry *left:%x\n",constep->left);
-        db2Debug2("      struct connEntry *right:%x\n",constep->right);
+        db2Debug5("      user:%s",constep->user);
+        db2Debug5("      *svchp:%x",constep->svchp);
+        db2Debug5("      *userhp:%x",constep->userhp);
+        db2Debug5("      *handlelist:%x",constep->handlelist);
+        db2Debug5("      xact_level:%d",constep->xact_level);
+        db2Debug5("      struct connEntry *left:%x",constep->left);
+        db2Debug5("      struct connEntry *right:%x",constep->right);
 
       }
     }
@@ -418,6 +421,7 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
   struct connEntry *connp;
   char *nlscopy = NULL;
   ub4 is_connected;
+  int retry;
 
   /* it's easier to deal with empty strings */
   if (!connectstring) connectstring = "";
@@ -427,11 +431,13 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
  /* search environment and server handle in cache */
   envp = findenvEntry (rootenvEntry,nls_lang);
   if (envp) {
+    db2Debug2("db2GetSession found envp: %x   envhp: %x    errhp: %x",envp,envp->envhp,envp->errhp);
     envhp = envp->envhp;
     errhp = envp->errhp;
     if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & srvhp, (ub4) OCI_HTYPE_SERVER, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIHandleAlloc failed to allocate server handle", db2Message);
        /* free error handle */
+      db2Debug2("db2GetSession environment not active anymore");
       if (checkerr (OCIHandleFree( errhp, OCI_HTYPE_ERROR),(dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
         db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free error handle","%s", db2Message);
       }
@@ -445,6 +451,7 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
     } /* check of handle not ok */
   }
   if (envp == NULL) {
+    db2Debug2("db2GetSession create new environment");
     /* Create environment and error handle.  */
 
     /* create persistent copy of "nls_lang" */
@@ -490,6 +497,7 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
   /* search connect string in cache */
   srvp = findsrvEntry (envp->srvlist,connectstring);
   if (srvp != NULL) {
+    db2Debug2("db2GetSession found connect string");
     srvhp = srvp->srvhp;
     /* Test if we are still connected.  If not, clean up the mess.  */
     if (checkerr (OCIAttrGet ((dvoid *) srvhp, (ub4) OCI_HTYPE_SERVER,
@@ -498,22 +506,25 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
     }
 
     if (is_connected == OCI_SERVER_NOT_CONNECTED) {
+      db2Debug2("db2GetSession OCI Server not connected");
       /* clean up */
       silent = 1;
       while (srvp->connlist != NULL) {
+        db2Debug2("db2GetSession OCI Server not connected close Session");
 	closeSession (envhp, srvhp, srvp->connlist->userhp, 0);
       }
+      db2Debug2("db2GetSession OCI Server not connected disconnet");
       disconnectServer (envhp, srvhp);
       silent = 0;
 
       srvp = NULL;
     }
-  }
+  } 
+retry_connect:
+  if (srvp == NULL) { /* srvp == NULL */
+    db2Debug2("db2GetSession create new connect string");
 
-  if (srvp == NULL) {
-    /*
-     * No cache entry was found, we have to create a new server connection.
-     */
+    /* * No cache entry was found, we have to create a new server connection.  */
 
     /* create new server handle */
     if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & srvhp, (ub4) OCI_HTYPE_SERVER, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
@@ -551,6 +562,7 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
      */
 
     /* allocate service handle */
+    db2Debug2("db2GetSession allocate service handle");
     if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & svchp, (ub4) OCI_HTYPE_SVCCTX, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
       free (nlscopy);
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIHandleAlloc failed to allocate service handle", db2Message);
@@ -585,13 +597,28 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
     /* register callback for PostgreSQL transaction events */
     db2RegisterCallback (connp);
   }
-  printstruct();
+
   if (connp->xact_level <= 0) {
     db2Debug2 ("db2_fdw: begin serializable remote transaction");
 
     /* start a read-only or "serializable" (= repeatable read) transaction */
     if (checkerr (OCITransStart (svchp, errhp, (uword) 0, OCI_TRANS_SERIALIZABLE), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
-	db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCITransStart failed to start a transaction", db2Message);
+      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCITransStart failed to start a transaction", db2Message);
+      if (retry && (err_code == 1012 || err_code == 28 || err_code == 3113 || err_code == 3135)) {
+        db2Debug2 ("db2_fdw: session has been terminated, try to reconnect");
+        silent = 1;
+        while (srvp->connlist != NULL) {
+          closeSession (envhp, srvhp, srvp->connlist->userhp, 0);
+        }
+        disconnectServer (envhp, srvhp);
+        silent = 0;
+        srvp = NULL;
+        userhp = NULL;
+        retry = 0;
+        goto retry_connect;
+      } else {
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCITransStart failed to start a transaction", db2Message);
+      }
     }
     connp->xact_level = 1;
   }
@@ -1007,6 +1034,7 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
     reply->cols[i - 1]->scale = scale;
 
     /* determine db2Type and length to allocate */
+    db2Debug2("db2Describe Type: %d",Type);
     switch (Type) {
     case SQLT_AFC:
       /* CHAR(n) */
@@ -1086,8 +1114,12 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
       reply->cols[i - 1]->val_size = max_long + 4;
       break;
     default:
-      reply->cols[i - 1]->db2type = SQL_TYPE_OTHER;
-      reply->cols[i - 1]->val_size = 0;
+      db2Debug2("xml col: char_size: %d bin_size %d ",charsize,bin_size);
+      reply->cols[i - 1]->db2type = SQL_TYPE_XML;
+      reply->cols[i - 1]->val_size = charsize + 1;
+/*      reply->cols[i - 1]->val_size = bin_size * 4 + 1;
+/*      reply->cols[i - 1]->db2type = SQL_TYPE_OTHER;
+      reply->cols[i - 1]->val_size = 0;*/
     }
   }
 
@@ -1332,7 +1364,7 @@ db2ExecuteQuery (db2Session * session, const struct db2Table *db2Table, struct p
   sword result;
   ub4 rowcount;
   int param_count = 0;
-
+printstruct();
   for (param = paramList; param; param = param->next)
     ++param_count;
 
@@ -1448,7 +1480,7 @@ db2ExecuteQuery (db2Session * session, const struct db2Table *db2Table, struct p
       }
     }
   }
-
+printstruct();
   /* execute the query and get the first result row */
   result = checkerr (OCIStmtExecute (session->connp->svchp, session->stmthp, session->envp->errhp, (ub4) 1, (ub4) 0,
 				     (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__);
@@ -1822,8 +1854,10 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
       *type = SQL_TYPE_STAMP;
     else if (strcmp (typename, "TIME    ") == 0)
       *type = SQL_TYPE_TIME;
-    else if (strcmp (typename, "XML     ") == 0)
+    else if (strcmp (typename, "XML     ") == 0) {
+      db2Debug2("typename: <%s>",typename);
       *type = SQL_TYPE_XML;
+    }
     else if (strcmp (typename, "BLOB    ") == 0)
       *type = SQL_TYPE_BLOB;
     else if (strcmp (typename, "CLOB    ") == 0)
@@ -1840,8 +1874,10 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
       *type = SQL_TYPE_FLOAT;
     else if (strcmp (typename, "BOOLEAN ") == 0)
       *type = SQL_TYPE_BOOLEAN;
-    else
+    else {
+      db2Debug2(" OTHER typename: <%s>",typename);
       *type = SQL_TYPE_OTHER;
+    }
 
     /* set character length, precision and scale to 0 if it was a NULL value */
     if (ind_charlen != OCI_IND_NOTNULL)
