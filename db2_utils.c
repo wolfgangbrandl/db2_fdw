@@ -30,7 +30,7 @@
 static int silent = 0;
 
 /* contains DB2 error messages, set by checkerr() */
-#define ERRBUFSIZE 500
+#define ERRBUFSIZE 2000
 static char db2Message[ERRBUFSIZE];
 static sb4 err_code;
 
@@ -54,7 +54,7 @@ struct handleEntry
 /*
  * Linked list of handles for cached DB2 connections.
  */
-static struct envEntry *envlist = NULL;
+static struct envEntry *rootenvEntry = NULL;
 
 /*
  * NULL value used for "in" callback in RETURNING clauses.
@@ -63,9 +63,24 @@ static struct envEntry *envlist = NULL;
 /*
  * Helper functions
  */
+struct srvEntry * findsrvEntryHandle (struct srvEntry * start, OCIServer * srvhp);
+struct srvEntry * findsrvEntry (struct srvEntry * start, const char * connectstring);
+int deletesrvEntry(struct srvEntry * start, struct srvEntry * node);
+struct srvEntry * insertsrvEntry(struct srvEntry * start, const char * connectstring, OCIServer * srvhp);
+struct connEntry * findconnEntry(struct connEntry * start, const char * user);
+struct connEntry * findconnEntryHandle (struct connEntry * start, OCISession  * userhp);
+int deleteconnEntry(struct connEntry * start, struct connEntry * node);
+struct connEntry * insertconnEntry(struct connEntry * start, const char * user, OCISvcCtx *svchp,OCISession * userhp);
+struct envEntry * findenvEntry(struct envEntry * start, const char * nlslang);
+struct envEntry * findenvEntryHandle (struct envEntry * start, OCIEnv * envhp);
+int deleteenvEntry(struct envEntry * start, struct envEntry * node);
+int deleteenvEntryLang(struct envEntry * start, const char * nlslang);
+struct envEntry * insertenvEntry(struct envEntry * start, const char * nlslang, OCIEnv *envhp, OCIError *errhp);
+int printstruct();
+
 static void db2SetSavepoint (db2Session * session, int nest_level);
 static void setDB2Environment (char *nls_lang);
-static sword checkerr (sword status, dvoid * handle, ub4 handleType);
+static sword checkerr (sword status, dvoid * handle, ub4 handleType, int line, char * file);
 static char *copyDB2Text (const char *string, int size, int quote);
 static void closeSession (OCIEnv * envhp, OCIServer * srvhp, OCISession * userhp, int disconnect);
 static void disconnectServer (OCIEnv * envhp, OCIServer * srvhp);
@@ -76,12 +91,322 @@ static ub2 getDB2Type (db2Type arg);
 static sb4 bind_out_callback (void *octxp, OCIBind * bindp, ub4 iter, ub4 index, void **bufpp, ub4 ** alenp, ub1 * piecep, void **indp, ub2 ** rcodep);
 static sb4 bind_in_callback (void *ictxp, OCIBind * bindp, ub4 iter, ub4 index, void **bufpp, ub4 * alenp, ub1 * piecep, void **indpp);
 
-/*
- * db2GetSession
- * 		Look up an DB2 connection in the cache, create a new one if there is none.
- * 		The result is a palloc'ed data structure containing the connection.
- * 		"curlevel" is the current PostgreSQL transaction level.
- */
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+struct srvEntry * findsrvEntryHandle (struct srvEntry * start, OCIServer * srvhp) 
+{
+  struct srvEntry *step;
+  for (step = start; step != NULL; step = step->right){
+    if (start->srvhp == srvhp) {
+      return step;
+    }
+  }
+  return NULL;
+}
+
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+struct srvEntry * findsrvEntry (struct srvEntry * start,const  char * connectstring) 
+{
+  struct srvEntry *step;
+  for (step = start; step != NULL; step = step->right){
+    if (strcmp (step->connectstring, connectstring) == 0) {
+      return step;
+    }
+  }
+  return NULL;
+}
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+int deletesrvEntry(struct srvEntry * start, struct srvEntry * node) 
+{ 
+  struct srvEntry *step;
+  for (step = start; step != NULL; step = step->right){
+    if (step == node) {
+      free (step->connectstring);
+      step->connectstring = NULL;
+      if (step->left == NULL && step->right == NULL){
+      } else if (step->left == NULL) {
+        step->right->left = NULL;
+      } else if (step->right == NULL) {
+        step->left->right = NULL;
+      } else {
+        step->left->right = step->right;
+        step->right->left = step->left;
+      }
+      free (step);
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+struct srvEntry * insertsrvEntry(struct srvEntry * start,const char * connectstring, OCIServer * srvhp) 
+{ 
+  struct srvEntry *step;
+  struct srvEntry *new;
+  if (start == NULL){ /* first entry in list */
+    new = malloc(sizeof(struct srvEntry));
+    new->right = new->left = NULL;
+  } else {
+    for (step = start; step->right != NULL; step = step->right){ }
+    new = malloc(sizeof(struct srvEntry));
+    step->right = new; 
+    new->left = step;
+    new->right = NULL;
+  }
+  new->connectstring = strdup(connectstring);
+  new->srvhp = srvhp;
+  new->connlist = NULL;
+  return new; 
+} 
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+struct connEntry * findconnEntry(struct connEntry * start, const char * user)
+{
+  struct connEntry *step;
+  for (step = start; step != NULL; step = step->right){
+    if (strcmp (step->user, user) == 0) {
+      return step;
+    }
+  }
+  return NULL;
+}
+
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+struct connEntry * findconnEntryHandle (struct connEntry * start, OCISession  * userhp)
+{
+  struct connEntry *step;
+  for (step = start; step != NULL; step = step->right){
+    if (step->userhp == userhp) {
+      return step;
+    }
+  }
+  return NULL;
+}
+
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+int deleteconnEntry(struct connEntry * start, struct connEntry * node)
+{
+  struct connEntry *step;
+  for (step = start; step != NULL; step = step->right){
+    if (step == node) {
+      free (step->user);
+      step->user = 0x00;
+      if (step->left == NULL && step->right == NULL){
+      } else if (step->left == NULL) {
+        step->right->left = NULL;
+      } else if (step->right == NULL) {
+        step->left->right = NULL;
+      } else {
+        step->left->right = step->right;
+        step->right->left = step->left;
+      }
+      free (step);
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+struct connEntry * insertconnEntry(struct connEntry * start, const char * user, OCISvcCtx *svchp,OCISession * userhp)
+{
+  struct connEntry *step;
+  struct connEntry *new;
+  if (start == NULL){ /* first entry in list */
+    new = malloc(sizeof(struct connEntry));
+    new->right = new->left = NULL;
+  } else {
+    for (step = start; step->right != NULL; step = step->right){ }
+    new = malloc(sizeof(struct connEntry));
+    step->right = new;
+    new->left = step;
+    new->right = NULL;
+  }
+  new->user = strdup(user);
+  new->handlelist = NULL;
+  new->xact_level = 0;
+  new->svchp = svchp;
+  new->userhp = userhp;
+  return new;
+}
+
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+struct envEntry * findenvEntry(struct envEntry * start, const char * nlslang) 
+{
+  struct envEntry *step;
+  for (step = start; step != NULL; step = step->right){
+    if (strcmp (step->nls_lang, nlslang) == 0) {
+      return step;
+    }
+  }
+  return NULL;
+}
+
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+struct envEntry * findenvEntryHandle (struct envEntry * start, OCIEnv * envhp)
+{
+  struct envEntry *step;
+  for (step = start; step != NULL; step = step->right){
+    if (step->envhp == envhp) {
+      return step;
+    }
+  }
+  return NULL;
+}
+
+
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+int deleteenvEntryLang(struct envEntry * start, const char * nlslang) 
+{ 
+  struct envEntry *step;
+  for (step = start; step != NULL; step = step->right){
+    if (strcmp (step->nls_lang, nlslang) == 0) {
+      free (step->nls_lang);
+      if (step->left == NULL && step->right == NULL){
+        rootenvEntry = NULL;
+        free (step);
+        step = NULL;
+      } else if (step->left == NULL) {
+        step->right->left = NULL;
+        free (step);
+        step = NULL;
+      } else if (step->right == NULL) {
+        step->left->right = NULL;
+        free (step);
+        step = NULL;
+      } else {
+        step->left->right = step->right;
+        step->right->left = step->left;
+        free (step);
+        step = NULL;
+      }
+      return FALSE;
+    }
+  }
+  return TRUE;
+
+}
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+int deleteenvEntry(struct envEntry * start, struct envEntry * node) 
+{ 
+  struct envEntry *step;
+  for (step = start; step != NULL; step = step->right){
+    if (step == node) {
+      free (step->nls_lang);
+      step->nls_lang = NULL;
+      if (step->left == NULL && step->right == NULL){
+        rootenvEntry = NULL;
+        free (step);
+        step = NULL;
+      } else if (step->left == NULL) {
+        step->right->left = NULL;
+        free (step);
+        step = NULL;
+      } else if (step->right == NULL) {
+        step->left->right = NULL;
+        free (step);
+        step = NULL;
+      } else {
+        step->left->right = step->right;
+        step->right->left = step->left;
+        free (step);
+        step = NULL;
+      }
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+struct envEntry * insertenvEntry(struct envEntry * start, const char * nlslang, OCIEnv *envhp, OCIError *errhp) 
+{ 
+  struct envEntry *step;
+  struct envEntry *new;
+  if (start == NULL){ /* first entry in list */
+    new = malloc(sizeof(struct envEntry));
+    new->right = new->left = NULL; 
+  } else {
+    for (step = start; step->right != NULL; step = step->right){ }
+    new = malloc(sizeof(struct envEntry));
+    step->right = new; 
+    new->left = step;
+    new->right = NULL;
+  }
+  new->nls_lang = strdup(nlslang);
+  new->envhp = envhp;
+  new->errhp = errhp;
+  new->srvlist = NULL;
+  return new; 
+} 
+/**************************************************************************************************/
+/**************************************************************************************************/
+/**************************************************************************************************/
+int printstruct()
+{
+  struct envEntry *envstep;
+  struct srvEntry *srvstep;
+  struct connEntry *constep;
+  char szBuffer[1000];
+  sprintf(szBuffer,"before calling pthread_create getpid: %d getpthread_self: %lu",getpid(), pthread_self());
+  db2Debug5("printstruct for: %s",szBuffer);
+  for (envstep = rootenvEntry; envstep != NULL; envstep = envstep->right){
+    db2Debug5("EnvEntry: %x",envstep);
+    db2Debug5("  nls_lang: %s",envstep->nls_lang);
+    db2Debug5("  step->*envhp:%x",envstep->envhp);
+    db2Debug5("  step->*errhp:%x",envstep->errhp);
+    db2Debug5("  srvEntry step->*srvlist:%x",envstep->srvlist);
+    db2Debug5("  step->*left:%x",envstep->left);
+    db2Debug5("  step->*right:%x",envstep->right);
+    for (srvstep = envstep->srvlist; srvstep != NULL; srvstep = srvstep->right){
+      db2Debug5("    connectstring:%s",srvstep->connectstring);
+      db2Debug5("    *srvhp:%x",srvstep->srvhp);
+      db2Debug5("    *connlist:%x",srvstep->connlist);
+      db2Debug5("    *left:%x",srvstep->left);
+      db2Debug5("    *right:%x",srvstep->right);
+      for (constep = srvstep->connlist; constep != NULL; constep = constep->right){
+        db2Debug5("      user:%s",constep->user);
+        db2Debug5("      *svchp:%x",constep->svchp);
+        db2Debug5("      *userhp:%x",constep->userhp);
+        db2Debug5("      *handlelist:%x",constep->handlelist);
+        db2Debug5("      xact_level:%d",constep->xact_level);
+        db2Debug5("      struct connEntry *left:%x",constep->left);
+        db2Debug5("      struct connEntry *right:%x",constep->right);
+
+      }
+    }
+  }
+  return FALSE;
+}
+/**************************************************************************************************/
+/* db2GetSession */
+/* 		Look up an DB2 connection in the cache, create a new one if there is none. */
+/* 		The result is a palloc'ed data structure containing the connection. */
+/* 		"curlevel" is the current PostgreSQL transaction level. */
+/**************************************************************************************************/
 db2Session * db2GetSession (const char *connectstring, char *user, char *password, const char *nls_lang, const char *tablename, int curlevel)
 {
   OCIEnv *envhp = NULL;
@@ -96,43 +421,49 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
   struct connEntry *connp;
   char *nlscopy = NULL;
   ub4 is_connected;
-  int retry = 1;
+  int retry;
 
   /* it's easier to deal with empty strings */
-  if (!connectstring)
-    connectstring = "";
-  if (!user)
-    user = "";
-  if (!password)
-    password = "";
-  if (!nls_lang)
-    nls_lang = "";
+  if (!connectstring) connectstring = "";
+  if (!user) user = "";
+  if (!password) password = "";
+  if (!nls_lang) nls_lang = "";
+ /* search environment and server handle in cache */
+  envp = findenvEntry (rootenvEntry,nls_lang);
+  if (envp) {
+    db2Debug2("db2GetSession found envp: %x   envhp: %x    errhp: %x",envp,envp->envhp,envp->errhp);
+    envhp = envp->envhp;
+    errhp = envp->errhp;
+    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & srvhp, (ub4) OCI_HTYPE_SERVER, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
+      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIHandleAlloc failed to allocate server handle", db2Message);
+       /* free error handle */
+      db2Debug2("db2GetSession environment not active anymore");
+      if (checkerr (OCIHandleFree( errhp, OCI_HTYPE_ERROR),(dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free error handle","%s", db2Message);
+      }
 
-  /* search environment and server handle in cache */
-  for (envp = envlist; envp != NULL; envp = envp->next) {
-    if (strcmp (envp->nls_lang, nls_lang) == 0) {
-      envhp = envp->envhp;
-      errhp = envp->errhp;
-      break;
-    }
+      /* free environment handle */
+      if (checkerr (OCIHandleFree( envhp, OCI_HTYPE_ENV),(dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free environment handle","%s", db2Message);
+      }
+      deleteenvEntryLang(rootenvEntry, nls_lang);
+      envp = NULL;
+    } /* check of handle not ok */
   }
-
-  if (envhp == NULL) {
-    /*
-     * Create environment and error handle.
-     */
+  if (envp == NULL) {
+    db2Debug2("db2GetSession create new environment");
+    /* Create environment and error handle.  */
 
     /* create persistent copy of "nls_lang" */
     if ((nlscopy = strdup (nls_lang)) == NULL)
-      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", strlen (nls_lang) + 1);
+      db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %d bytes of memory", strlen (nls_lang) + 1);
 
     /* set DB2 environment */
     setDB2Environment (nlscopy);
 
     /* create environment handle */
-    if (checkerr (OCIEnvCreate ((OCIEnv **) & envhp, (ub4) OCI_OBJECT,
-				(dvoid *) 0, (dvoid * (*)(dvoid *, size_t)) 0,
-				(dvoid * (*)(dvoid *, dvoid *, size_t)) 0, (void (*)(dvoid *, dvoid *)) 0, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV) != 0) {
+    if (checkerr (OCIEnvCreate ((OCIEnv **) & envhp, (ub4) OCI_OBJECT, (dvoid *) 0, (dvoid * (*)(dvoid *, size_t)) 0,
+				(dvoid * (*)(dvoid *, dvoid *, size_t)) 0, (void (*)(dvoid *, dvoid *)) 0, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != 0) {
       free (nlscopy);
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIEnvCreate failed to create environment handle", db2Message);
     }
@@ -148,95 +479,81 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
     db2SetHandlers ();
 
     /* allocate error handle */
-    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & errhp, (ub4) OCI_HTYPE_ERROR, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & errhp, (ub4) OCI_HTYPE_ERROR, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
       free (nlscopy);
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIHandleAlloc failed to allocate error handle", db2Message);
     }
 
     /* add handles to cache */
-    if ((envp = malloc (sizeof (struct envEntry))) == NULL) {
-      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", sizeof (struct envEntry));
+    envp = insertenvEntry(rootenvEntry,nlscopy,envhp,errhp);
+    if (envp  == NULL) {
+      db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %d bytes of memory", sizeof (struct envEntry));
     }
-
-    envp->nls_lang = nlscopy;
-    envp->envhp = envhp;
-    envp->errhp = errhp;
-    envp->srvlist = NULL;
-    envp->next = envlist;
-    envlist = envp;
+    if ( rootenvEntry == NULL) {
+      rootenvEntry = envp;
+    }
   }
 
   /* search connect string in cache */
-  for (srvp = envp->srvlist; srvp != NULL; srvp = srvp->next) {
-    if (strcmp (srvp->connectstring, connectstring) == 0) {
-      srvhp = srvp->srvhp;
-      break;
-    }
-  }
-
+  srvp = findsrvEntry (envp->srvlist,connectstring);
   if (srvp != NULL) {
-    /*
-     * Test if we are still connected.
-     * If not, clean up the mess.
-     */
-
+    db2Debug2("db2GetSession found connect string");
+    srvhp = srvp->srvhp;
+    /* Test if we are still connected.  If not, clean up the mess.  */
     if (checkerr (OCIAttrGet ((dvoid *) srvhp, (ub4) OCI_HTYPE_SERVER,
-			      (dvoid *) & is_connected, (ub4 *) 0, (ub4) OCI_ATTR_SERVER_STATUS, errhp), (dvoid *) errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			      (dvoid *) & is_connected, (ub4 *) 0, (ub4) OCI_ATTR_SERVER_STATUS, errhp), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error connecting to DB2: OCIAttrGet failed to get connection status", db2Message);
     }
 
     if (is_connected == OCI_SERVER_NOT_CONNECTED) {
+      db2Debug2("db2GetSession OCI Server not connected");
       /* clean up */
       silent = 1;
       while (srvp->connlist != NULL) {
+        db2Debug2("db2GetSession OCI Server not connected close Session");
 	closeSession (envhp, srvhp, srvp->connlist->userhp, 0);
       }
+      db2Debug2("db2GetSession OCI Server not connected disconnet");
       disconnectServer (envhp, srvhp);
       silent = 0;
 
       srvp = NULL;
     }
-  }
-
+  } 
 retry_connect:
-  if (srvp == NULL) {
-    /*
-     * No cache entry was found, we have to create a new server connection.
-     */
+  if (srvp == NULL) { /* srvp == NULL */
+    db2Debug2("db2GetSession create new connect string");
+
+    /* * No cache entry was found, we have to create a new server connection.  */
 
     /* create new server handle */
-    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & srvhp, (ub4) OCI_HTYPE_SERVER, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & srvhp, (ub4) OCI_HTYPE_SERVER, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIHandleAlloc failed to allocate server handle", db2Message);
     }
 
     /* connect to the DB2 server */
-    if (checkerr (OCIServerAttach (srvhp, errhp, (text *) connectstring, strlen (connectstring), 0), (dvoid *) errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+    if (checkerr (OCIServerAttach (srvhp, errhp, (text *) connectstring, strlen (connectstring), 0), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       if (tablename)
-	db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "connection for foreign table \"%s\" cannot be established", tablename, db2Message);
+	db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "connection for foreign table"," <%s> cannot be established. %s", tablename, db2Message);
       else
 	db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot connect to foreign DB2 server", db2Message);
     }
 
     /* add server handle to cache */
-    if ((srvp = malloc (sizeof (struct srvEntry))) == NULL) {
-      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", sizeof (struct srvEntry));
+    envp->srvlist  = srvp = insertsrvEntry (envp->srvlist,connectstring,srvhp);
+    if (srvp == NULL) {
+      db2Error_d (FDW_OUT_OF_MEMORY, "error connecting to DB2:"," failed to allocate %d bytes of memory", sizeof (struct srvEntry));
     }
-    if ((srvp->connectstring = strdup (connectstring)) == NULL) {
-      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", strlen (connectstring) + 1);
-    }
-    srvp->srvhp = srvhp;
-    srvp->next = envp->srvlist;
-    srvp->connlist = NULL;
-    envp->srvlist = srvp;
   }
 
   /* search user session for this server in cache */
-  for (connp = srvp->connlist; connp != NULL; connp = connp->next) {
-    if (strcmp (connp->user, user) == 0) {
-      svchp = connp->svchp;
-      userhp = connp->userhp;
-      break;
-    }
+  connp = findconnEntry(srvp->connlist,user);
+  if (connp) {
+    svchp = connp->svchp;
+    userhp = connp->userhp;
+  } else {
+    svchp = NULL;
+    userhp =  NULL;
   }
 
   if (userhp == NULL) {
@@ -245,19 +562,20 @@ retry_connect:
      */
 
     /* allocate service handle */
-    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & svchp, (ub4) OCI_HTYPE_SVCCTX, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+    db2Debug2("db2GetSession allocate service handle");
+    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & svchp, (ub4) OCI_HTYPE_SVCCTX, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
       free (nlscopy);
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIHandleAlloc failed to allocate service handle", db2Message);
     }
 
     /* create transaction handle */
-    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & txnhp, (ub4) OCI_HTYPE_TRANS, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & txnhp, (ub4) OCI_HTYPE_TRANS, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIHandleAlloc failed to allocate transaction handle", db2Message);
     }
 
 
     /* create session handle */
-    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & userhp, (ub4) OCI_HTYPE_SESSION, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+    if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & userhp, (ub4) OCI_HTYPE_SESSION, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIHandleAlloc failed to allocate session handle", db2Message);
     }
     /* connect to the database */
@@ -267,27 +585,14 @@ retry_connect:
 			    (DB2Text *) user,
 			    strlen ((char *) user),
 			    (DB2Text *) password,
-			    strlen ((char *) password), (DB2Text *) connectstring, strlen ((char *) connectstring)), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
-      db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection User: %s ", user, db2Message);
-      db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection password: %s ", password, db2Message);
-      db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection connectstring: %s ", connectstring, db2Message);
-      db2Error_d  (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection to foreign DB2 server", db2Message);
+			    strlen ((char *) password), (DB2Text *) connectstring, strlen ((char *) connectstring)), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
+      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection User: %s ,%s", user, db2Message);
+      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection password: %s ,%s", password, db2Message);
+      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection connectstring: %s ,%s", connectstring, db2Message);
+      db2Error_d  (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection to foreign DB2 server,%s", db2Message);
     }
-
+    envp->srvlist->connlist = connp = insertconnEntry (srvp->connlist,user,svchp,userhp);
     /* add session handle to cache */
-    if ((connp = malloc (sizeof (struct connEntry))) == NULL) {
-      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", sizeof (struct connEntry));
-    }
-    if ((connp->user = strdup (user)) == NULL) {
-      db2Error_i (FDW_OUT_OF_MEMORY, "error connecting to DB2: failed to allocate %d bytes of memory", sizeof (strlen (user) + 1));
-    }
-    connp->svchp = svchp;
-    connp->userhp = userhp;
-    connp->geomtype = NULL;
-    connp->handlelist = NULL;
-    connp->xact_level = 0;
-    connp->next = srvp->connlist;
-    srvp->connlist = connp;
 
     /* register callback for PostgreSQL transaction events */
     db2RegisterCallback (connp);
@@ -297,30 +602,24 @@ retry_connect:
     db2Debug2 ("db2_fdw: begin serializable remote transaction");
 
     /* start a read-only or "serializable" (= repeatable read) transaction */
-    if (checkerr (OCITransStart (svchp, errhp, (uword) 0, OCI_TRANS_SERIALIZABLE), (dvoid *) errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
-      /*
-       * Certain DB2 errors mean that the session or the server connection
-       * got terminated.  Retry once in that case.
-       */
+    if (checkerr (OCITransStart (svchp, errhp, (uword) 0, OCI_TRANS_SERIALIZABLE), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
+      db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCITransStart failed to start a transaction", db2Message);
       if (retry && (err_code == 1012 || err_code == 28 || err_code == 3113 || err_code == 3135)) {
-	db2Debug2 ("db2_fdw: session has been terminated, try to reconnect");
-
-	silent = 1;
-	while (srvp->connlist != NULL) {
-	  closeSession (envhp, srvhp, srvp->connlist->userhp, 0);
-	}
-	disconnectServer (envhp, srvhp);
-	silent = 0;
-	srvp = NULL;
-	userhp = NULL;
-
-	retry = 0;
-	goto retry_connect;
+        db2Debug2 ("db2_fdw: session has been terminated, try to reconnect");
+        silent = 1;
+        while (srvp->connlist != NULL) {
+          closeSession (envhp, srvhp, srvp->connlist->userhp, 0);
+        }
+        disconnectServer (envhp, srvhp);
+        silent = 0;
+        srvp = NULL;
+        userhp = NULL;
+        retry = 0;
+        goto retry_connect;
+      } else {
+        db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCITransStart failed to start a transaction", db2Message);
       }
-      else
-	db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCITransStart failed to start a transaction", db2Message);
     }
-
     connp->xact_level = 1;
   }
 
@@ -359,14 +658,14 @@ db2CloseStatement (db2Session * session)
 void
 db2CloseConnections (void)
 {
-  while (envlist != NULL) {
-    while (envlist->srvlist != NULL) {
-      while (envlist->srvlist->connlist != NULL) {
-	closeSession (envlist->envhp, envlist->srvlist->srvhp, envlist->srvlist->connlist->userhp, 0);
+  while (rootenvEntry != NULL) {
+    while (rootenvEntry->srvlist != NULL) {
+      while (rootenvEntry->srvlist->connlist != NULL) {
+	closeSession (rootenvEntry->envhp, rootenvEntry->srvlist->srvhp, rootenvEntry->srvlist->connlist->userhp, 0);
       }
-      disconnectServer (envlist->envhp, envlist->srvlist->srvhp);
+      disconnectServer (rootenvEntry->envhp, rootenvEntry->srvlist->srvhp);
     }
-    removeEnvironment (envlist->envhp);
+    removeEnvironment (rootenvEntry->envhp);
   }
 }
 
@@ -399,8 +698,8 @@ db2Cancel (void)
   struct srvEntry *srvp;
 
   /* send a cancel request for all servers ignoring errors */
-  for (envp = envlist; envp != NULL; envp = envp->next)
-    for (srvp = envp->srvlist; srvp != NULL; srvp = srvp->next)
+  for (envp = rootenvEntry; envp != NULL; envp = envp->right)
+    for (srvp = envp->srvlist; srvp != NULL; srvp = srvp->right)
       (void) OCIBreak (srvp->srvhp, envp->errhp);
 }
 
@@ -423,7 +722,7 @@ db2EndTransaction (void *arg, int is_commit, int noerror)
     return;
 
   /* find the cached handles for the argument */
-  envp = envlist;
+  envp = rootenvEntry;
   while (envp) {
     srvp = envp->srvlist;
     while (srvp) {
@@ -433,15 +732,15 @@ db2EndTransaction (void *arg, int is_commit, int noerror)
 	  found = 1;
 	  break;
 	}
-	connp = connp->next;
+	connp = connp->right;
       }
       if (found)
 	break;
-      srvp = srvp->next;
+      srvp = srvp->right;
     }
     if (found)
       break;
-    envp = envp->next;
+    envp = envp->right;
   }
 
   if (!found)
@@ -459,14 +758,14 @@ db2EndTransaction (void *arg, int is_commit, int noerror)
   if (is_commit) {
     db2Debug2 ("db2_fdw: commit remote transaction");
 
-    if (checkerr (OCITransCommit (connp->svchp, envp->errhp, OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS && !noerror) {
+    if (checkerr (OCITransCommit (connp->svchp, envp->errhp, OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS && !noerror) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error committing transaction: OCITransCommit failed", db2Message);
     }
   }
   else {
     db2Debug2 ("db2_fdw: roll back remote transaction");
 
-    if (checkerr (OCITransRollback (connp->svchp, envp->errhp, OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS && !noerror) {
+    if (checkerr (OCITransRollback (connp->svchp, envp->errhp, OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS && !noerror) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error rolling back transaction: OCITransRollback failed", db2Message);
     }
   }
@@ -505,7 +804,7 @@ db2EndSubtransaction (void *arg, int nest_level, int is_commit)
   }
 
   /* find the cached handles for the argument */
-  envp = envlist;
+  envp = rootenvEntry;
   while (envp) {
     srvp = envp->srvlist;
     while (srvp) {
@@ -515,15 +814,15 @@ db2EndSubtransaction (void *arg, int nest_level, int is_commit)
 	  found = 1;
 	  break;
 	}
-	connp = connp->next;
+	connp = connp->right;
       }
       if (found)
 	break;
-      srvp = srvp->next;
+      srvp = srvp->right;
     }
     if (found)
       break;
-    envp = envp->next;
+    envp = envp->right;
   }
 
   if (!found)
@@ -539,13 +838,13 @@ db2EndSubtransaction (void *arg, int nest_level, int is_commit)
 
   /* prepare the query */
   if (checkerr (OCIStmtPrepare (stmthp, envp->errhp, (text *) query, (ub4) strlen (query),
-				(ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				(ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
     db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error rolling back to savepoint: OCIStmtPrepare failed to prepare rollback statement", db2Message);
   }
 
   /* rollback to savepoint */
   if (checkerr (OCIStmtExecute (connp->svchp, stmthp, envp->errhp, (ub4) 1, (ub4) 0,
-				(CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				(CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
     db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error rolling back to savepoint: OCIStmtExecute failed to set savepoint", db2Message);
   }
 
@@ -617,15 +916,15 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
 
   /* prepare the query */
   if (checkerr (OCIStmtPrepare (stmthp, session->envp->errhp, (text *) query, (ub4) strlen (query),
-				(ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				(ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
     db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIStmtPrepare failed to prepare query", db2Message);
   }
 
   if (checkerr (OCIStmtExecute (session->connp->svchp, stmthp, session->envp->errhp, (ub4) 0, (ub4) 0,
-				(CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DESCRIBE_ONLY), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				(CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DESCRIBE_ONLY), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
     if (err_code == 942)
-      db2Error_ssdh (FDW_TABLE_NOT_FOUND,
-		     "DB2 table %s for foreign table \"%s\" does not exist or does not allow read access", tablename, pgname,
+      db2Error_d (FDW_TABLE_NOT_FOUND, "table not found",
+		     "DB2 table %s for foreign table \"%s\" does not exist or does not allow read access;%s,%s", tablename, pgname,
 		     db2Message, "DB2 table names are case sensitive (normally all uppercase).");
     else
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIStmtExecute failed to describe table", db2Message);
@@ -639,7 +938,7 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
 
   /* get the number of columns */
   if (checkerr (OCIAttrGet ((dvoid *) stmthp, (ub4) OCI_HTYPE_STMT,
-			    (dvoid *) & ncols, (ub4 *) 0, (ub4) OCI_ATTR_PARAM_COUNT, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			    (dvoid *) & ncols, (ub4 *) 0, (ub4) OCI_ATTR_PARAM_COUNT, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
     db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIAttrGet failed to get number of columns", db2Message);
   }
 
@@ -661,13 +960,13 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
     reply->cols[i - 1]->val_null = 1;
 
     /* get the parameter descriptor for the column */
-    if (checkerr (OCIParamGet ((void *) stmthp, OCI_HTYPE_STMT, session->envp->errhp, (dvoid **) & colp, i), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+    if (checkerr (OCIParamGet ((void *) stmthp, OCI_HTYPE_STMT, session->envp->errhp, (dvoid **) & colp, i), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIParamGet failed to get column data", db2Message);
     }
 
     /* get the column name */
     if (checkerr (OCIAttrGet ((dvoid *) colp, OCI_DTYPE_PARAM, (dvoid *) & ident,
-			      &ident_size, (ub4) OCI_ATTR_NAME, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			      &ident_size, (ub4) OCI_ATTR_NAME, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIAttrGet failed to get column name", db2Message);
     }
 
@@ -675,14 +974,14 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
 
     /* get the data type */
     if (checkerr (OCIAttrGet ((dvoid *) colp, OCI_DTYPE_PARAM, (dvoid *) & db2type,
-			      (ub4 *) 0, (ub4) OCI_ATTR_TYPECODE, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			      (ub4 *) 0, (ub4) OCI_ATTR_TYPECODE, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIAttrGet failed to get column type", db2Message);
     }
     Type = db2type;
 
     /* get the column type name */
     if (checkerr (OCIAttrGet ((dvoid *) colp, OCI_DTYPE_PARAM, (dvoid *) & typname,
-			      &typname_size, (ub4) OCI_ATTR_TYPE_NAME, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			      &typname_size, (ub4) OCI_ATTR_TYPE_NAME, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIAttrGet failed to get column type name", db2Message);
     }
 
@@ -693,7 +992,7 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
 
     /* get the column type schema */
     if (checkerr (OCIAttrGet ((dvoid *) colp, OCI_DTYPE_PARAM, (dvoid *) & typschema,
-			      &typschema_size, (ub4) OCI_ATTR_SCHEMA_NAME, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			      &typschema_size, (ub4) OCI_ATTR_SCHEMA_NAME, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIAttrGet failed to get column type schema name", db2Message);
     }
 
@@ -704,37 +1003,38 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
 
     /* get the character set form */
     if (checkerr (OCIAttrGet ((dvoid *) colp, OCI_DTYPE_PARAM, (dvoid *) & csfrm,
-			      (ub4 *) 0, (ub4) OCI_ATTR_CHARSET_FORM, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			      (ub4 *) 0, (ub4) OCI_ATTR_CHARSET_FORM, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIAttrGet failed to get character set form", db2Message);
     }
 
     /* get the number of characters for string fields */
     if (checkerr (OCIAttrGet ((dvoid *) colp, OCI_DTYPE_PARAM, (dvoid *) & charsize,
-			      (ub4 *) 0, (ub4) OCI_ATTR_CHAR_USED, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			      (ub4 *) 0, (ub4) OCI_ATTR_CHAR_USED, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIAttrGet failed to get column length", db2Message);
     }
 
     /* get the binary length for RAW fields */
     if (checkerr (OCIAttrGet ((dvoid *) colp, OCI_DTYPE_PARAM, (dvoid *) & bin_size,
-			      (ub4 *) 0, (ub4) OCI_ATTR_DATA_SIZE, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			      (ub4 *) 0, (ub4) OCI_ATTR_DATA_SIZE, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIAttrGet failed to get column size", db2Message);
     }
 
     /* get the precision */
     if (checkerr (OCIAttrGet ((dvoid *) colp, OCI_DTYPE_PARAM, (dvoid *) & precision,
-			      (ub4 *) 0, (ub4) OCI_ATTR_PRECISION, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			      (ub4 *) 0, (ub4) OCI_ATTR_PRECISION, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIAttrGet failed to get column precision", db2Message);
     }
 
     /* get the scale */
     if (checkerr (OCIAttrGet ((dvoid *) colp, OCI_DTYPE_PARAM, (dvoid *) & scale,
-			      (ub4 *) 0, (ub4) OCI_ATTR_SCALE, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			      (ub4 *) 0, (ub4) OCI_ATTR_SCALE, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error describing remote table: OCIAttrGet failed to get column scale", db2Message);
     }
 
     reply->cols[i - 1]->scale = scale;
 
     /* determine db2Type and length to allocate */
+    db2Debug2("db2Describe Type: %d",Type);
     switch (Type) {
     case SQLT_AFC:
       /* CHAR(n) */
@@ -814,8 +1114,12 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
       reply->cols[i - 1]->val_size = max_long + 4;
       break;
     default:
-      reply->cols[i - 1]->db2type = SQL_TYPE_OTHER;
-      reply->cols[i - 1]->val_size = 0;
+      db2Debug2("xml col: char_size: %d bin_size %d ",charsize,bin_size);
+      reply->cols[i - 1]->db2type = SQL_TYPE_XML;
+      reply->cols[i - 1]->val_size = charsize + 1;
+/*      reply->cols[i - 1]->val_size = bin_size * 4 + 1;
+/*      reply->cols[i - 1]->db2type = SQL_TYPE_OTHER;
+      reply->cols[i - 1]->val_size = 0;*/
     }
   }
 
@@ -848,13 +1152,13 @@ db2SetSavepoint (db2Session * session, int nest_level)
 
     /* prepare the query */
     if (checkerr (OCIStmtPrepare (session->stmthp, session->envp->errhp, (text *) query, (ub4) strlen (query),
-				  (ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  (ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error setting savepoint: OCIStmtPrepare failed to prepare savepoint statement", db2Message);
     }
 
     /* set savepoint */
     if (checkerr (OCIStmtExecute (session->connp->svchp, session->stmthp, session->envp->errhp, (ub4) 1, (ub4) 0,
-				  (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error setting savepoint: OCIStmtExecute failed to set savepoint", db2Message);
     }
 
@@ -969,7 +1273,7 @@ db2PrepareQuery (db2Session * session, const char *query, const struct db2Table 
 
   /* prepare the statement */
   if (checkerr (OCIStmtPrepare (session->stmthp, session->envp->errhp, (text *) query, (ub4) strlen (query),
-				(ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				(ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
     db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: OCIStmtPrepare failed to prepare remote query", db2Message);
   }
 
@@ -1006,7 +1310,7 @@ db2PrepareQuery (db2Session * session, const char *query, const struct db2Table 
 	if (checkerr (OCIDefineByPos (session->stmthp, &defnhp, session->envp->errhp, (ub4)++ col_pos,
 				      (dvoid *) db2Table->cols[i]->val, (sb4) db2Table->cols[i]->val_size,
 				      type, (dvoid *) & db2Table->cols[i]->val_null,
-				      (ub2 *) & db2Table->cols[i]->val_len, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				      (ub2 *) & db2Table->cols[i]->val_len, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
 	  db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: OCIDefineByPos failed to define result value", db2Message);
 	}
 
@@ -1033,14 +1337,14 @@ db2PrepareQuery (db2Session * session, const char *query, const struct db2Table 
     defnhp = NULL;
     if (checkerr (OCIDefineByPos (session->stmthp, &defnhp, session->envp->errhp, (ub4) 1,
 				  (dvoid *) dummy, dummy_size, SQLT_STR, (dvoid *) & dummy_null,
-				  NULL, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  NULL, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: OCIDefineByPos failed to define result value", db2Message);
     }
   }
 
   /* set prefetch options */
   if (checkerr (OCIAttrSet ((dvoid *) session->stmthp, OCI_HTYPE_STMT, (dvoid *) & prefetch_rows, 0,
-			    OCI_ATTR_PREFETCH_ROWS, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			    OCI_ATTR_PREFETCH_ROWS, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
     db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: OCIAttrSet failed to set number of prefetched rows in statement handle", db2Message);
   }
 }
@@ -1060,7 +1364,7 @@ db2ExecuteQuery (db2Session * session, const struct db2Table *db2Table, struct p
   sword result;
   ub4 rowcount;
   int param_count = 0;
-
+printstruct();
   for (param = paramList; param; param = param->next)
     ++param_count;
 
@@ -1104,7 +1408,7 @@ db2ExecuteQuery (db2Session * session, const struct db2Table *db2Table, struct p
 	/* convert parameter string to NUMBER */
 	if (checkerr (OCINumberFromText (session->envp->errhp, (const DB2Text *) param->value,
 					 (ub4) value_len, (const DB2Text *) num_format, (ub4) value_len,
-					 (const DB2Text *) NULL, (ub4) 0, number), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+					 (const DB2Text *) NULL, (ub4) 0, number), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
 	  db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: OCINumberFromText failed to convert parameter", db2Message);
 	}
 	db2Free (num_format);
@@ -1162,7 +1466,7 @@ db2ExecuteQuery (db2Session * session, const struct db2Table *db2Table, struct p
     /* bind the value to the parameter */
     if (checkerr (OCIBindByName (session->stmthp, (OCIBind **) & param->bindh, session->envp->errhp, (text *) param->name,
 				 (sb4) strlen (param->name), value, value_len, value_type,
-				 (dvoid *) & indicators[param_count], NULL, NULL, (ub4) 0, NULL, oci_mode), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				 (dvoid *) & indicators[param_count], NULL, NULL, (ub4) 0, NULL, oci_mode), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: OCIBindByName failed to bind parameter", db2Message);
     }
 
@@ -1171,15 +1475,15 @@ db2ExecuteQuery (db2Session * session, const struct db2Table *db2Table, struct p
     if (param->bindType == BIND_OUTPUT) {
       if (checkerr (OCIBindDynamic ((OCIBind *) param->bindh, session->envp->errhp,
 				    db2Table->cols[param->colnum], &bind_in_callback,
-				    db2Table->cols[param->colnum], &bind_out_callback), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				    db2Table->cols[param->colnum], &bind_out_callback), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
 	db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: OCIBindDynamic failed to bind callback for parameter", db2Message);
       }
     }
   }
-
+printstruct();
   /* execute the query and get the first result row */
   result = checkerr (OCIStmtExecute (session->connp->svchp, session->stmthp, session->envp->errhp, (ub4) 1, (ub4) 0,
-				     (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR);
+				     (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__);
 
   if (result != OCI_SUCCESS && result != OCI_NO_DATA) {
     /* use the correct SQLSTATE for serialization failures */
@@ -1194,7 +1498,7 @@ db2ExecuteQuery (db2Session * session, const struct db2Table *db2Table, struct p
 
   /* get the number of processed rows (important for DML) */
   if (checkerr (OCIAttrGet ((dvoid *) session->stmthp, (ub4) OCI_HTYPE_STMT,
-			    (dvoid *) & rowcount, (ub4 *) 0, (ub4) OCI_ATTR_ROW_COUNT, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			    (dvoid *) & rowcount, (ub4 *) 0, (ub4) OCI_ATTR_ROW_COUNT, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
     db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error executing query: OCIAttrGet failed to get number of affected rows", db2Message);
   }
 
@@ -1228,7 +1532,7 @@ db2FetchNext (db2Session * session)
   }
 
   /* fetch the next result row */
-  result = checkerr (OCIStmtFetch2 (session->stmthp, session->envp->errhp, 1, OCI_FETCH_NEXT, 0, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR);
+  result = checkerr (OCIStmtFetch2 (session->stmthp, session->envp->errhp, 1, OCI_FETCH_NEXT, 0, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__);
 
   if (result != OCI_SUCCESS && result != OCI_NO_DATA) {
     db2Error_d (err_code == 8177 ? FDW_SERIALIZATION_FAILURE : FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: OCIStmtFetch2 failed to fetch next result row", db2Message);
@@ -1279,10 +1583,9 @@ db2GetLob (db2Session * session, void *locptr, db2Type type, char **value, long 
                   (ub2) 0, 
                   (ub1) SQLCS_IMPLICIT
                   );
-    result = checkerr (resultlob,(dvoid *) session->envp->errhp, OCI_HTYPE_ERROR);
+    result = checkerr (resultlob,(dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__);
 
     if (result == OCI_ERROR) {
-      printf ("resultlob:%d\n",resultlob);
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error fetching result: OCILobRead failed to read LOB chunk", db2Message);
     }
 
@@ -1322,11 +1625,11 @@ db2ServerVersion (const char *connectstring, char *user, char *password, char * 
   /* create environment handle */
   if (checkerr (OCIEnvCreate ((OCIEnv **) & envhp, (ub4) OCI_OBJECT,
         (dvoid *) 0, (dvoid * (*)(dvoid *, size_t)) 0,
-        (dvoid * (*)(dvoid *, dvoid *, size_t)) 0, (void (*)(dvoid *, dvoid *)) 0, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV) != 0) {
+        (dvoid * (*)(dvoid *, dvoid *, size_t)) 0, (void (*)(dvoid *, dvoid *)) 0, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != 0) {
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIEnvCreate failed to create environment handle", db2Message);
   }
   /* allocate error handle */
-  if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & errhp, (ub4) OCI_HTYPE_ERROR, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
+  if (checkerr (OCIHandleAlloc ((dvoid *) envhp, (dvoid **) & errhp, (ub4) OCI_HTYPE_ERROR, (size_t) 0, (dvoid **) 0), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "error connecting to DB2: OCIHandleAlloc failed to allocate error handle", db2Message);
   }
 
@@ -1336,37 +1639,37 @@ db2ServerVersion (const char *connectstring, char *user, char *password, char * 
                             (DB2Text *) user,
                             strlen ((char *) user),
                             (DB2Text *) password,
-                            strlen ((char *) password), (DB2Text *) connectstring, strlen ((char *) connectstring)), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
-    db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection User: %s ", user, db2Message);
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection to foreign DB2 server", db2Message);
-    db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection Password: %s ", password, db2Message);
-    db2Error_sd (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate connection Connectstring: %s ", connectstring, db2Message);
+                            strlen ((char *) password), (DB2Text *) connectstring, strlen ((char *) connectstring)), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection User: %s %s", user, db2Message);
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection to foreign DB2 server %s", db2Message);
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection Password: %s %s", password, db2Message);
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection Connectstring: %s %s", connectstring, db2Message);
   }
 
   /* get version information from remote server */
-  if (checkerr (OCIServerVersion (svchp, errhp, vers, len, OCI_HTYPE_SVCCTX ), (dvoid *) errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error getting server version: OCIServerVersion failed to retrieve version", db2Message);
+  if (checkerr (OCIServerVersion (svchp, errhp, vers, len, OCI_HTYPE_SVCCTX ), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error getting server version:"," OCIServerVersion failed to retrieve version", db2Message);
   }
 
   strcpy (version,(char *)vers);
   /* disconnect from the database */
-  if (checkerr ( OCILogoff( svchp, errhp ), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot Logoff from DB2 server", db2Message);
+  if (checkerr ( OCILogoff( svchp, errhp ), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot Logoff from DB2 server","%s", db2Message);
   }
 
   /* free connection handle */
-  if (checkerr (OCIHandleFree( svchp, OCI_HTYPE_SVCCTX ), (dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free connection Handle", db2Message);
+  if (checkerr (OCIHandleFree( svchp, OCI_HTYPE_SVCCTX ), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free connection Handle","%s", db2Message);
   }
 
   /* free error handle */
-  if (checkerr (OCIHandleFree( errhp, OCI_HTYPE_ERROR ),(dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free error handle", db2Message);
+  if (checkerr (OCIHandleFree( errhp, OCI_HTYPE_ERROR),(dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free error handle","%s", db2Message);
   }
 
   /* free environment handle */
-  if (checkerr (OCIHandleFree( envhp, OCI_HTYPE_ENV ),(dvoid *) envhp, OCI_HTYPE_ENV) != OCI_SUCCESS) {
-    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free environment handle", db2Message);
+  if (checkerr (OCIHandleFree( envhp, OCI_HTYPE_ENV),(dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
+    db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot free environment handle","%s", db2Message);
   }
 
   (void)OCITerminate( OCI_DEFAULT );
@@ -1410,27 +1713,27 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
 
     /* prepare the query */
     if (checkerr (OCIStmtPrepare (session->stmthp, session->envp->errhp, (text *) schema_query, (ub4) strlen (schema_query),
-				  (ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  (ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIStmtPrepare failed to prepare schema query", db2Message);
     }
 
     /* bind the parameter */
     if (checkerr (OCIBindByName (session->stmthp, &bndhp, session->envp->errhp, (text *) ":nsp",
 				 (sb4) 4, (dvoid *) schema, (sb4) (strlen (schema) + 1),
-				 SQLT_STR, (dvoid *) & ind, NULL, NULL, (ub4) 0, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				 SQLT_STR, (dvoid *) & ind, NULL, NULL, (ub4) 0, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIBindByName failed to bind parameter", db2Message);
     }
 
     /* define the result value */
     if (checkerr (OCIDefineByPos (session->stmthp, &defnhp_count, session->envp->errhp, (ub4) 1,
 				  (dvoid *) & count, (sb4) sizeof (int),
-				  SQLT_INT, (dvoid *) & ind, (ub2 *) & len_count, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  SQLT_INT, (dvoid *) & ind, (ub2 *) & len_count, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIDefineByPos failed to define result", db2Message);
     }
 
     /* execute the query and get the first result row */
     if (checkerr (OCIStmtExecute (session->connp->svchp, session->stmthp, session->envp->errhp, (ub4) 1, (ub4) 0,
-				  (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIStmtExecute failed to execute schema query", db2Message);
     }
 
@@ -1450,65 +1753,65 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
 
     /* set prefetch options */
     if (checkerr (OCIAttrSet ((dvoid *) session->stmthp, OCI_HTYPE_STMT, (dvoid *) & prefetch_rows, 0,
-			      OCI_ATTR_PREFETCH_ROWS, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+			      OCI_ATTR_PREFETCH_ROWS, session->envp->errhp), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIAttrSet failed to set number of prefetched rows in statement handle", db2Message);
     }
 
     /* prepare the query */
     if (checkerr (OCIStmtPrepare (session->stmthp, session->envp->errhp, (text *) column_query, (ub4) strlen (column_query),
-				  (ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  (ub4) OCI_NTV_SYNTAX, (ub4) OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIStmtPrepare failed to prepare remote query", db2Message);
     }
 
     /* bind the parameter */
     if (checkerr (OCIBindByName (session->stmthp, &bndhp, session->envp->errhp, (text *) ":nsp", (sb4) 4, (dvoid *) schema, (sb4) (strlen (schema) + 1),
-				 SQLT_STR, (dvoid *) & ind, NULL, NULL, (ub4) 0, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				 SQLT_STR, (dvoid *) & ind, NULL, NULL, (ub4) 0, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIBindByName failed to bind parameter", db2Message);
     }
 
     /* define result values */
     s_tabname[128] = '\0';
     if (checkerr (OCIDefineByPos (session->stmthp, &defnhp_tabname, session->envp->errhp, (ub4) 1, (dvoid *) s_tabname, (sb4) 129,
-				  SQLT_STR, (dvoid *) & ind_tabname, (ub2 *) & len_tabname, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  SQLT_STR, (dvoid *) & ind_tabname, (ub2 *) & len_tabname, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIDefineByPos failed to define result for table name", db2Message);
     }
 
     s_colname[128] = '\0';
     if (checkerr (OCIDefineByPos (session->stmthp, &defnhp_colname, session->envp->errhp, (ub4) 2, (dvoid *) s_colname, (sb4) 129,
-				  SQLT_STR, (dvoid *) & ind_colname, (ub2 *) & len_colname, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  SQLT_STR, (dvoid *) & ind_colname, (ub2 *) & len_colname, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIDefineByPos failed to define result for column name", db2Message);
     }
 
     if (checkerr (OCIDefineByPos (session->stmthp, &defnhp_typename, session->envp->errhp, (ub4) 3, (dvoid *) typename, (sb4) 129,
-				  SQLT_STR, (dvoid *) & ind_typename, (ub2 *) & len_typename, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  SQLT_STR, (dvoid *) & ind_typename, (ub2 *) & len_typename, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIDefineByPos failed to define result for type name", db2Message);
     }
 
 
     if (checkerr (OCIDefineByPos (session->stmthp, &defnhp_charlen, session->envp->errhp, (ub4) 4, (dvoid *) charlen, (sb4) sizeof (int),
-				  SQLT_INT, (dvoid *) & ind_charlen, (ub2 *) & len_charlen, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  SQLT_INT, (dvoid *) & ind_charlen, (ub2 *) & len_charlen, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIDefineByPos failed to define result for character length", db2Message);
     }
 
 
     if (checkerr (OCIDefineByPos (session->stmthp, &defnhp_scale, session->envp->errhp, (ub4) 5, (dvoid *) typescale, (sb4) sizeof (int),
-				  SQLT_INT, (dvoid *) & ind_scale, (ub2 *) & len_scale, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  SQLT_INT, (dvoid *) & ind_scale, (ub2 *) & len_scale, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIDefineByPos failed to define result for type scale", db2Message);
     }
 
     if (checkerr (OCIDefineByPos (session->stmthp, &defnhp_isnull, session->envp->errhp, (ub4) 6, (dvoid *) isnull, (sb4) 2,
-				  SQLT_STR, (dvoid *) & ind_isnull, (ub2 *) & len_isnull, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  SQLT_STR, (dvoid *) & ind_isnull, (ub2 *) & len_isnull, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIDefineByPos failed to define result for nullability", db2Message);
     }
 
     if (checkerr (OCIDefineByPos (session->stmthp, &defnhp_key, session->envp->errhp, (ub4) 7, (dvoid *) key, (sb4) sizeof (int),
-				  SQLT_INT, (dvoid *) & ind_key, (ub2 *) & len_key, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS) {
+				  SQLT_INT, (dvoid *) & ind_key, (ub2 *) & len_key, NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIDefineByPos failed to define result for primary key", db2Message);
     }
 
     /* execute the query and get the first result row */
     result = checkerr (OCIStmtExecute (session->connp->svchp, session->stmthp, session->envp->errhp, (ub4) 1, (ub4) 0,
-				       (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR);
+				       (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__);
 
     if (result != OCI_SUCCESS && result != OCI_NO_DATA) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIStmtExecute failed to execute column query", db2Message);
@@ -1516,7 +1819,7 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
   }
   else {
     /* fetch the next result row */
-    result = checkerr (OCIStmtFetch2 (session->stmthp, session->envp->errhp, 1, OCI_FETCH_NEXT, 0, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR);
+    result = checkerr (OCIStmtFetch2 (session->stmthp, session->envp->errhp, 1, OCI_FETCH_NEXT, 0, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__);
 
     if (result != OCI_SUCCESS && result != OCI_NO_DATA) {
       db2Error_d (FDW_UNABLE_TO_CREATE_EXECUTION, "error importing foreign schema: OCIStmtFetch2 failed to fetch next result row", db2Message);
@@ -1551,8 +1854,10 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
       *type = SQL_TYPE_STAMP;
     else if (strcmp (typename, "TIME    ") == 0)
       *type = SQL_TYPE_TIME;
-    else if (strcmp (typename, "XML     ") == 0)
+    else if (strcmp (typename, "XML     ") == 0) {
+      db2Debug2("typename: <%s>",typename);
       *type = SQL_TYPE_XML;
+    }
     else if (strcmp (typename, "BLOB    ") == 0)
       *type = SQL_TYPE_BLOB;
     else if (strcmp (typename, "CLOB    ") == 0)
@@ -1569,8 +1874,10 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
       *type = SQL_TYPE_FLOAT;
     else if (strcmp (typename, "BOOLEAN ") == 0)
       *type = SQL_TYPE_BOOLEAN;
-    else
+    else {
+      db2Debug2(" OTHER typename: <%s>",typename);
       *type = SQL_TYPE_OTHER;
+    }
 
     /* set character length, precision and scale to 0 if it was a NULL value */
     if (ind_charlen != OCI_IND_NOTNULL)
@@ -1588,40 +1895,51 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
  * checkerr
  * 		Call OCIErrorGet to get error message and error code.
  */
-sword checkerr (sword status, dvoid * handle, ub4 handleType)
+sword checkerr (sword status, dvoid * handle, ub4 handleType,int line, char * file)
 {
-  int length;
   char message[1024 + 1];
+  char submessage[200];
   char sqlstate[5 + 1];
   sb4 sqlcode;
   ub4 i = 1;
 
 
   memset (db2Message,0x00,sizeof(db2Message));
-  if (status == OCI_SUCCESS_WITH_INFO || status == OCI_ERROR) {
-    OCIErrorGet ( handle, 
-                  i, 
-                  (text *)sqlstate, 
-                  &sqlcode, 
-                  (text *) message, 
-                  sizeof(message), 
-                  handleType);
-    length = strlen (message);
-    if (length > 0){
-      if (message[length - 1] == '\n'){
-        strncpy (db2Message,message,length-1);
-      } else {
-        strcpy (db2Message,message);
+  switch (status)
+  {
+    case OCI_SUCCESS:
+      break;
+    case OCI_INVALID_HANDLE:
+      sprintf(db2Message,"-CI INVALID HANDLE-----\nline=%d\nfile=%s\n",line,file);
+      break;
+    case OCI_ERROR:
+      memset (submessage,0x00,sizeof(submessage));
+      memset (message,0x00,sizeof(message));
+      while (OCIErrorGet ( handle, i, (text *)sqlstate, &sqlcode, (text *) message, sizeof(message), handleType) == OCI_SUCCESS)  {
+        sprintf(submessage,"SQLSTATE = %s  SQLCODE = %d\nline=%d\nfile=%s\n", sqlstate,sqlcode,line,file);
+        if ((sizeof(db2Message) - strlen(db2Message))> strlen(submessage)+1){
+          strcat (db2Message,submessage);
+        }
+        if ((sizeof(db2Message) - strlen(db2Message))> strlen(message)+2){
+          strcat (db2Message,message);
+          strcat (db2Message,"\n");
+        }
+        i++;
+        memset (submessage,0x00,sizeof(submessage));
+        memset (message,0x00,sizeof(message));
       }
-    }
-  }
-
-  if (status == OCI_SUCCESS_WITH_INFO)
-    status = OCI_SUCCESS;
-
-  if (status == OCI_NO_DATA) {
-    strcpy (db2Message, "SQL0100: no data found");
-    err_code = (sb4) 100;
+      break;
+    case OCI_SUCCESS_WITH_INFO:
+      status = OCI_SUCCESS;
+      break;
+    case OCI_NEED_DATA:
+      break;
+    case OCI_NO_DATA:
+      strcpy (db2Message, "SQL0100: no data found");
+      err_code = (sb4) 100;
+      break;
+    default:
+      break;
   }
 
   return status;
@@ -1678,52 +1996,35 @@ void closeSession (OCIEnv * envhp, OCIServer * srvhp, OCISession * userhp, int d
 {
   struct envEntry *envp;
   struct srvEntry *srvp;
-  struct connEntry *connp, *prevconnp = NULL;
+  struct connEntry *connp;
   OCITrans *txnhp = NULL;
 
   /* search environment handle in cache */
-  for (envp = envlist; envp != NULL; envp = envp->next) {
-    if (envp->envhp == envhp)
-      break;
-  }
+  envp = findenvEntryHandle (rootenvEntry,envhp);
 
   if (envp == NULL) {
-    if (silent)
-      return;
-    else
-      db2Error (FDW_ERROR, "closeSession internal error: environment handle not found in cache");
+    if (silent) return;
+    else db2Error (FDW_ERROR, "closeSession internal error: environment handle not found in cache");
   }
 
   /* search server handle in cache */
-  for (srvp = envp->srvlist; srvp != NULL; srvp = srvp->next) {
-    if (srvp->srvhp == srvhp)
-      break;
-  }
+  srvp = findsrvEntryHandle (envp->srvlist,srvhp);
 
   if (srvp == NULL) {
-    if (silent)
-      return;
-    else
-      db2Error (FDW_ERROR, "closeSession internal error: server handle not found in cache");
+    if (silent) return;
+    else db2Error (FDW_ERROR, "closeSession internal error: server handle not found in cache");
   }
 
   /* search connection in cache */
-  for (connp = srvp->connlist; connp != NULL; connp = connp->next) {
-    if (connp->userhp == userhp)
-      break;
-
-    prevconnp = connp;
-  }
+  connp = findconnEntryHandle (srvp->connlist,userhp);
 
   if (connp == NULL) {
-    if (silent)
-      return;
-    else
-      db2Error (FDW_ERROR, "closeSession internal error: user handle not found in cache");
+    if (silent) return;
+    else db2Error (FDW_ERROR, "closeSession internal error: user handle not found in cache");
   }
 
   /* terminate the session */
-  if (checkerr (OCISessionEnd (connp->svchp, envp->errhp, connp->userhp, OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS && !silent) {
+  if (checkerr (OCISessionEnd (connp->svchp, envp->errhp, connp->userhp, OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS && !silent) {
     db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error closing session: OCISessionEnd failed to terminate session", db2Message);
   }
 
@@ -1732,7 +2033,7 @@ void closeSession (OCIEnv * envhp, OCIServer * srvhp, OCISession * userhp, int d
 
   /* get the transaction handle */
   if (checkerr (OCIAttrGet ((dvoid *) connp->svchp, (ub4) OCI_HTYPE_SVCCTX,
-			    (dvoid *) & txnhp, (ub4 *) 0, (ub4) OCI_ATTR_TRANS, envp->errhp), (dvoid *) envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS && !silent) {
+			    (dvoid *) & txnhp, (ub4 *) 0, (ub4) OCI_ATTR_TRANS, envp->errhp), (dvoid *) envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS && !silent) {
     db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error closing session: OCIAttrGet failed to get transaction handle", db2Message);
   }
 
@@ -1743,21 +2044,19 @@ void closeSession (OCIEnv * envhp, OCIServer * srvhp, OCISession * userhp, int d
   (void) OCIHandleFree ((dvoid *) txnhp, OCI_HTYPE_TRANS);
 
   /* remove the session handle from the cache */
-  if (prevconnp == NULL)
-    srvp->connlist = connp->next;
-  else
-    prevconnp->next = connp->next;
+  deleteconnEntry(srvp->connlist, connp);
+  srvp->connlist = NULL;
 
   /* close the server session if desired and this is the last session */
-  if (disconnect && srvp->connlist == NULL)
+  if (disconnect && srvp->left->connlist == NULL)
     disconnectServer (envhp, srvhp);
 
   /* unregister callback for rolled back transactions */
   db2UnregisterCallback (connp);
 
   /* free the memory */
-  free (connp->user);
-  free (connp);
+/*  free (connp->user);
+  free (connp);*/
 }
 
 /*
@@ -1767,38 +2066,25 @@ void closeSession (OCIEnv * envhp, OCIServer * srvhp, OCISession * userhp, int d
 void disconnectServer (OCIEnv * envhp, OCIServer * srvhp)
 {
   struct envEntry *envp;
-  struct srvEntry *srvp, *prevsrvp = NULL;
+  struct srvEntry *srvp;
 
   /* search environment handle in cache */
-  for (envp = envlist; envp != NULL; envp = envp->next) {
-    if (envp->envhp == envhp)
-      break;
-  }
-
+  envp = findenvEntryHandle (rootenvEntry,envhp);
   if (envp == NULL) {
-    if (silent)
-      return;
-    else
-      db2Error (FDW_ERROR, "disconnectServer internal error: environment handle not found in cache");
+    if (silent) return;
+    else db2Error (FDW_ERROR, "disconnectServer internal error: environment handle not found in cache");
   }
 
   /* search server handle in cache */
-  for (srvp = envp->srvlist; srvp != NULL; srvp = srvp->next) {
-    if (srvp->srvhp == srvhp)
-      break;
-
-    prevsrvp = srvp;
-  }
+  srvp = findsrvEntryHandle (envp->srvlist,srvhp);
 
   if (srvp == NULL) {
-    if (silent)
-      return;
-    else
-      db2Error (FDW_ERROR, "disconnectServer internal error: server handle not found in cache");
+    if (silent) return;
+    else db2Error (FDW_ERROR, "disconnectServer internal error: server handle not found in cache");
   }
 
   /* disconnect server */
-  if (checkerr (OCIServerDetach (srvp->srvhp, envp->errhp, OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR) != OCI_SUCCESS && !silent) {
+  if (checkerr (OCIServerDetach (srvp->srvhp, envp->errhp, OCI_DEFAULT), (dvoid *) envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS && !silent) {
     db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error closing session: OCIServerDetach failed to detach from server", db2Message);
   }
 
@@ -1806,14 +2092,8 @@ void disconnectServer (OCIEnv * envhp, OCIServer * srvhp)
   (void) OCIHandleFree ((dvoid *) srvp->srvhp, OCI_HTYPE_SERVER);
 
   /* remove server entry from the linked list */
-  if (prevsrvp == NULL)
-    envp->srvlist = srvp->next;
-  else
-    prevsrvp->next = srvp->next;
-
-  /* free the memory */
-  free (srvp->connectstring);
-  free (srvp);
+  deletesrvEntry(envp->srvlist,srvp);
+  envp->srvlist = NULL;
 }
 
 /*
@@ -1822,15 +2102,10 @@ void disconnectServer (OCIEnv * envhp, OCIServer * srvhp)
  */
 void removeEnvironment (OCIEnv * envhp)
 {
-  struct envEntry *envp, *prevenvp = NULL;
+  struct envEntry *envp;
 
   /* search environment handle in cache */
-  for (envp = envlist; envp != NULL; envp = envp->next) {
-    if (envp->envhp == envhp)
-      break;
-
-    prevenvp = envp;
-  }
+  envp = findenvEntryHandle (rootenvEntry,envhp);
 
   if (envp == NULL) {
     if (silent)
@@ -1846,14 +2121,8 @@ void removeEnvironment (OCIEnv * envhp)
   (void) OCIHandleFree ((dvoid *) envp->envhp, OCI_HTYPE_ENV);
 
   /* remove environment entry from the linked list */
-  if (prevenvp == NULL)
-    envlist = envp->next;
-  else
-    prevenvp->next = envp->next;
-
-  /* free the memory */
-  free (envp->nls_lang);
-  free (envp);
+  deleteenvEntry(rootenvEntry,envp);
+  envp = NULL;
 }
 
 /*
@@ -1865,10 +2134,11 @@ void allocHandle (dvoid ** handlepp, ub4 type, int isDescriptor, OCIEnv * envhp,
 {
   struct handleEntry *entry;
   sword rc;
+  printstruct();
 
   /* create entry for linked list */
   if ((entry = malloc (sizeof (struct handleEntry))) == NULL) {
-    db2Error_i (FDW_OUT_OF_MEMORY, "error allocating handle: failed to allocate %d bytes of memory", sizeof (struct handleEntry));
+    db2Error_d (FDW_OUT_OF_MEMORY, "error allocating handle:"," failed to allocate %d bytes of memory", sizeof (struct handleEntry));
   }
 
   if (isDescriptor)

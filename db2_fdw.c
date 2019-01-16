@@ -8,11 +8,7 @@
 #include "postgres.h"
 
 #include "fmgr.h"
-#if PG_VERSION_NUM < 90300
-#include "access/htup.h"
-#else
 #include "access/htup_details.h"
-#endif /* PG_VERSION_NUM */
 #include "access/reloptions.h"
 #include "access/sysattr.h"
 #include "access/xact.h"
@@ -86,28 +82,14 @@
 #define WIDTH_THRESHOLD 1024
 #endif /* WIDTH_THRESHOLD */
 
-#if PG_VERSION_NUM < 90200
-#define OLD_FDW_API
-#else
 #undef OLD_FDW_API
-#endif /* PG_VERSION_NUM */
-
-#if PG_VERSION_NUM >= 90300
 #define WRITE_API
-#else
-#undef WRITE_API
-#endif /* PG_VERSION_NUM */
 
-#if PG_VERSION_NUM >= 90500
 #define IMPORT_API
 
 /* array_create_iterator has a new signature from 9.5 on */
 #define array_create_iterator(arr, slice_ndim) array_create_iterator(arr, slice_ndim, NULL)
-#else
-#undef IMPORT_API
-#endif /* PG_VERSION_NUM */
 
-#if PG_VERSION_NUM >= 90600
 #define JOIN_API
 
 /* the useful macro IS_SIMPLE_REL is defined in v10, backport */
@@ -119,9 +101,6 @@
 
 /* GetConfigOptionByName has a new signature from 9.6 on */
 #define GetConfigOptionByName(name, varname) GetConfigOptionByName(name, varname, false)
-#else
-#undef JOIN_API
-#endif /* PG_VERSION_NUM */
 
 #if PG_VERSION_NUM < 110000
 /* backport macro from V11 */
@@ -185,14 +164,11 @@ static struct DB2FdwOption valid_options[] = {
   {OPT_READONLY, ForeignTableRelationId, false},
   {OPT_SAMPLE, ForeignTableRelationId, false},
   {OPT_PREFETCH, ForeignTableRelationId, false}
-#ifndef OLD_FDW_API
   , {OPT_KEY, AttributeRelationId, false}
-#endif /* OLD_FDW_API */
 };
 
 #define option_count (sizeof(valid_options)/sizeof(struct DB2FdwOption))
 
-#ifdef WRITE_API
 /*
  * Array to hold the type output functions during table modification.
  * It is ok to hold this cache in a static variable because there cannot
@@ -200,7 +176,6 @@ static struct DB2FdwOption valid_options[] = {
  */
 
 static regproc *output_funcs;
-#endif /* WRITE_API */
 
 /*
  * FDW-specific information for RelOptInfo.fdw_private and ForeignScanState.fdw_state.
@@ -275,27 +250,16 @@ extern PGDLLEXPORT void _PG_init (void);
 /*
  * FDW callback routines
  */
-#ifdef OLD_FDW_API
-static FdwPlan *db2PlanForeignScan (Oid foreigntableid, PlannerInfo * root, RelOptInfo * baserel);
-#else
 static void db2GetForeignRelSize (PlannerInfo * root, RelOptInfo * baserel, Oid foreigntableid);
 static void db2GetForeignPaths (PlannerInfo * root, RelOptInfo * baserel, Oid foreigntableid);
-#ifdef JOIN_API
 static void db2GetForeignJoinPaths (PlannerInfo * root, RelOptInfo * joinrel, RelOptInfo * outerrel, RelOptInfo * innerrel, JoinType jointype, JoinPathExtraData * extra);
-#endif /* JOIN_API */
-static ForeignScan *db2GetForeignPlan (PlannerInfo * root, RelOptInfo * foreignrel, Oid foreigntableid, ForeignPath * best_path, List * tlist, List * scan_clauses
-#if PG_VERSION_NUM >= 90500
-				       , Plan * outer_plan
-#endif				/* PG_VERSION_NUM */
-  );
+static ForeignScan *db2GetForeignPlan (PlannerInfo * root, RelOptInfo * foreignrel, Oid foreigntableid, ForeignPath * best_path, List * tlist, List * scan_clauses , Plan * outer_plan);
 static bool db2AnalyzeForeignTable (Relation relation, AcquireSampleRowsFunc * func, BlockNumber * totalpages);
-#endif /* OLD_FDW_API */
 static void db2ExplainForeignScan (ForeignScanState * node, ExplainState * es);
 static void db2BeginForeignScan (ForeignScanState * node, int eflags);
 static TupleTableSlot *db2IterateForeignScan (ForeignScanState * node);
 static void db2EndForeignScan (ForeignScanState * node);
 static void db2ReScanForeignScan (ForeignScanState * node);
-#ifdef WRITE_API
 static void db2AddForeignUpdateTargets (Query * parsetree, RangeTblEntry * target_rte, Relation target_relation);
 static List *db2PlanForeignModify (PlannerInfo * root, ModifyTable * plan, Index resultRelation, int subplan_index);
 static void db2BeginForeignModify (ModifyTableState * mtstate, ResultRelInfo * rinfo, List * fdw_private, int subplan_index, int eflags);
@@ -305,10 +269,7 @@ static TupleTableSlot *db2ExecForeignDelete (EState * estate, ResultRelInfo * ri
 static void db2EndForeignModify (EState * estate, ResultRelInfo * rinfo);
 static void db2ExplainForeignModify (ModifyTableState * mtstate, ResultRelInfo * rinfo, List * fdw_private, int subplan_index, struct ExplainState *es);
 static int db2IsForeignRelUpdatable (Relation rel);
-#endif /* WRITE_API */
-#ifdef IMPORT_API
 static List *db2ImportForeignSchema (ImportForeignSchemaStmt * stmt, Oid serverOid);
-#endif /* IMPORT_API */
 
 /*
  * Helper functions
@@ -317,17 +278,13 @@ static struct DB2FdwState *getFdwState (Oid foreigntableid, double *sample_perce
 static void db2GetOptions (Oid foreigntableid, List ** options);
 static char *createQuery (struct DB2FdwState *fdwState, RelOptInfo * foreignrel, bool modify, List * query_pathkeys);
 static void deparseFromExprForRel (struct DB2FdwState *fdwState, StringInfo buf, RelOptInfo * joinrel, List ** params_list);
-#ifdef JOIN_API
 static void appendConditions (List * exprs, StringInfo buf, RelOptInfo * joinrel, List ** params_list);
 static bool foreign_join_ok (PlannerInfo * root, RelOptInfo * joinrel, JoinType jointype, RelOptInfo * outerrel, RelOptInfo * innerrel, JoinPathExtraData * extra);
 static const char *get_jointype_name (JoinType jointype);
 static List *build_tlist_to_deparse (RelOptInfo * foreignrel);
-#endif /* JOIN_API */
 static void getColumnData (Oid foreigntableid, struct db2Table *db2Table);
-#ifndef OLD_FDW_API
 static int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple * rows, int targrows, double *totalrows, double *totaldeadrows);
 static void appendAsType (StringInfoData * dest, const char *s, Oid type);
-#endif /* OLD_FDW_API */
 static char *deparseExpr (db2Session * session, RelOptInfo * foreignrel, Expr * expr, const struct db2Table *db2Table, List ** params);
 static char *datumToString (Datum datum, Oid type);
 static void getUsedColumns (Expr * expr, struct db2Table *db2Table);
@@ -340,28 +297,22 @@ static Const *serializeLong (long i);
 static struct DB2FdwState *deserializePlanData (List * list);
 static char *deserializeString (Const * constant);
 static long deserializeLong (Const * constant);
-#ifndef OLD_FDW_API
 static bool optionIsTrue (const char *value);
 static Expr *find_em_expr_for_rel (EquivalenceClass * ec, RelOptInfo * rel);
-#endif /* OLD_FDW_API */
 static char *deparseDate (Datum datum);
 static char *deparseTimestamp (Datum datum, bool hasTimezone);
 static char *deparseInterval (Datum datum);
-#ifdef WRITE_API
 static struct DB2FdwState *copyPlanData (struct DB2FdwState *orig);
 static void subtransactionCallback (SubXactEvent event, SubTransactionId mySubid, SubTransactionId parentSubid, void *arg);
 static void addParam (struct paramDesc **paramList, char *name, Oid pgtype, db2Type db2type, int colnum);
 static void setModifyParameters (struct paramDesc *paramList, TupleTableSlot * newslot, TupleTableSlot * oldslot, struct db2Table *db2Table, db2Session * session);
-#endif /* WRITE_API */
 static void transactionCallback (XactEvent event, void *arg);
 static void exitHook (int code, Datum arg);
 static void db2Die (SIGNAL_ARGS);
 static char *setSelectParameters (struct paramDesc *paramList, ExprContext * econtext);
 static void convertTuple (struct DB2FdwState *fdw_state, Datum * values, bool * nulls, bool trunc_lob);
 static void errorContextCallback (void *arg);
-#ifdef IMPORT_API
 static char *fold_case (char *name, fold_t foldcase);
-#endif /* IMPORT_API */
 
 #define REL_ALIAS_PREFIX    "r"
 /* Handy macro to add relation name qualification */
@@ -377,23 +328,16 @@ db2_fdw_handler (PG_FUNCTION_ARGS)
 {
   FdwRoutine *fdwroutine = makeNode (FdwRoutine);
 
-#ifdef OLD_FDW_API
-  fdwroutine->PlanForeignScan = db2PlanForeignScan;
-#else
   fdwroutine->GetForeignRelSize = db2GetForeignRelSize;
   fdwroutine->GetForeignPaths = db2GetForeignPaths;
-#ifdef JOIN_API
   fdwroutine->GetForeignJoinPaths = db2GetForeignJoinPaths;
-#endif /* JOIN_API */
   fdwroutine->GetForeignPlan = db2GetForeignPlan;
   fdwroutine->AnalyzeForeignTable = db2AnalyzeForeignTable;
-#endif /* OLD_FDW_API */
   fdwroutine->ExplainForeignScan = db2ExplainForeignScan;
   fdwroutine->BeginForeignScan = db2BeginForeignScan;
   fdwroutine->IterateForeignScan = db2IterateForeignScan;
   fdwroutine->ReScanForeignScan = db2ReScanForeignScan;
   fdwroutine->EndForeignScan = db2EndForeignScan;
-#ifdef WRITE_API
   fdwroutine->AddForeignUpdateTargets = db2AddForeignUpdateTargets;
   fdwroutine->PlanForeignModify = db2PlanForeignModify;
   fdwroutine->BeginForeignModify = db2BeginForeignModify;
@@ -403,10 +347,7 @@ db2_fdw_handler (PG_FUNCTION_ARGS)
   fdwroutine->EndForeignModify = db2EndForeignModify;
   fdwroutine->ExplainForeignModify = db2ExplainForeignModify;
   fdwroutine->IsForeignRelUpdatable = db2IsForeignRelUpdatable;
-#endif /* WRITE_API */
-#ifdef IMPORT_API
   fdwroutine->ImportForeignSchema = db2ImportForeignSchema;
-#endif /* IMPORT_API */
 
   PG_RETURN_POINTER (fdwroutine);
 }
@@ -460,11 +401,7 @@ db2_fdw_validator (PG_FUNCTION_ARGS)
     }
 
     /* check valid values for "readonly" and "key" */
-    if (strcmp (def->defname, OPT_READONLY) == 0
-#ifndef OLD_FDW_API
-	|| strcmp (def->defname, OPT_KEY) == 0
-#endif /* OLD_FDW_API */
-      ) {
+    if (strcmp (def->defname, OPT_READONLY) == 0 || strcmp (def->defname, OPT_KEY) == 0) {
       char *val = ((Value *) (def->arg))->val.str;
       if (pg_strcasecmp (val, "on") != 0
 	  && pg_strcasecmp (val, "off") != 0
@@ -658,77 +595,12 @@ db2_diag (PG_FUNCTION_ARGS)
  * 		Library load-time initalization.
  * 		Sets exitHook() callback for backend shutdown.
  */
-void
-_PG_init (void)
+void _PG_init (void)
 {
   /* register an exit hook */
   on_proc_exit (&exitHook, PointerGetDatum (NULL));
 }
 
-#ifdef OLD_FDW_API
-/*
- * db2PlanForeignScan
- * 		Get an DB2FdwState for this foreign scan.
- * 		A FdwPlan is created and the state is are stored
- * 		("serialized") in its fdw_private field.
- */
-FdwPlan *
-db2PlanForeignScan (Oid foreigntableid, PlannerInfo * root, RelOptInfo * baserel)
-{
-  struct DB2FdwState *fdwState;
-  FdwPlan *fdwplan;
-  List *fdw_private;
-  List *local_conds = NIL, *remote_conds = NIL;	/* ignored */
-  int i;
-
-  elog (DEBUG1, "db2_fdw: plan foreign table scan on %d", foreigntableid);
-
-  /* get connection options, connect and get the remote table description */
-  fdwState = getFdwState (foreigntableid, NULL);
-
-  /*
-   * Store the table OID in each table column.
-   * This is used to construct unique table aliases.
-   */
-  for (i = 0; i < fdwState->db2Table->ncols; ++i) {
-    fdwState->db2Table->cols[i]->varno = baserel->relid;
-  }
-
-  /*
-   * Those conditions that can be pushed down will be collected into
-   * an DB2 WHERE clause.
-   */
-  fdwState->where_clause = deparseWhereConditions (fdwState, baserel, &local_conds, &remote_conds);
-
-  /* construct DB2 query and get the list of parameters and actions for RestrictInfos */
-  fdwState->query = createQuery (fdwState, baserel, false, NIL);
-  elog (DEBUG1, "db2_fdw: remote query is: %s", fdwState->query);
-
-  /* release DB2 session (will be cached) */
-  pfree (fdwState->session);
-  fdwState->session = NULL;
-
-  /* get PostgreSQL column data types, check that they match DB2's */
-  for (i = 0; i < fdwState->db2Table->ncols; ++i)
-    if (fdwState->db2Table->cols[i]->used)
-      checkDataType (fdwState->db2Table->cols[i]->db2type,
-		     fdwState->db2Table->cols[i]->scale, fdwState->db2Table->cols[i]->pgtype, fdwState->db2Table->pgname, fdwState->db2Table->cols[i]->pgname);
-
-  /* use a random "high" value for cost */
-  fdwState->startup_cost = fdwState->total_cost = 10000.0;
-
-  /* "serialize" all necessary information in the private area */
-  fdw_private = serializePlanData (fdwState);
-
-  /* construct FdwPlan */
-  fdwplan = makeNode (FdwPlan);
-  fdwplan->startup_cost = fdwState->startup_cost;
-  fdwplan->total_cost = fdwState->total_cost;
-  fdwplan->fdw_private = fdw_private;
-
-  return fdwplan;
-}
-#else
 /*
  * db2GetForeignRelSize
  * 		Get an DB2FdwState for this foreign scan.
@@ -878,18 +750,13 @@ db2GetForeignPaths (PlannerInfo * root, RelOptInfo * baserel, Oid foreigntableid
 
   /* add the only path */
   add_path (baserel, (Path *) create_foreignscan_path (root, baserel,
-#if PG_VERSION_NUM >= 90600
 						       NULL,	/* default pathtarget */
-#endif /* PG_VERSION_NUM */
 						       baserel->rows, fdwState->startup_cost, fdwState->total_cost, usable_pathkeys, NULL,
-#if PG_VERSION_NUM >= 90500
 						       NULL,	/* no extra plan */
-#endif /* PG_VERSION_NUM */
 						       NIL)
     );
 }
 
-#ifdef JOIN_API
 /*
  * db2GetForeignJoinPaths
  * 		Add possible ForeignPath to joinrel if the join is safe to push down.
@@ -972,7 +839,6 @@ db2GetForeignJoinPaths (PlannerInfo * root, RelOptInfo * joinrel, RelOptInfo * o
   /* add generated path to joinrel */
   add_path (joinrel, (Path *) joinpath);
 }
-#endif /* JOIN_API */
 
 /*
  * db2GetForeignPlan
@@ -980,11 +846,7 @@ db2GetForeignJoinPaths (PlannerInfo * root, RelOptInfo * joinrel, RelOptInfo * o
  * 		the RestrictInfo clauses not handled entirely by DB2 and the list
  * 		of parameters we need for execution.
  */
-ForeignScan * db2GetForeignPlan (PlannerInfo * root, RelOptInfo * foreignrel, Oid foreigntableid, ForeignPath * best_path, List * tlist, List * scan_clauses
-#if PG_VERSION_NUM >= 90500
-				 , Plan * outer_plan
-#endif /* PG_VERSION_NUM */
-  )
+ForeignScan * db2GetForeignPlan (PlannerInfo * root, RelOptInfo * foreignrel, Oid foreigntableid, ForeignPath * best_path, List * tlist, List * scan_clauses , Plan * outer_plan)
 {
   struct DB2FdwState *fdwState = (struct DB2FdwState *) foreignrel->fdw_private;
   List *fdw_private = NIL;
@@ -993,14 +855,10 @@ ForeignScan * db2GetForeignPlan (PlannerInfo * root, RelOptInfo * foreignrel, Oi
   Relation rel;
   Index scan_relid;		/* will be 0 for join relations */
   List *local_exprs = fdwState->local_conds;
-#if PG_VERSION_NUM >= 90500
   List *fdw_scan_tlist = NIL;
-#endif /* PG_VERSION_NUM */
 
-#ifdef JOIN_API
   /* treat base relations and join relations differently */
   if (IS_SIMPLE_REL (foreignrel)) {
-#endif /* JOIN_API */
     /* for base relations, set scan_relid as the relid of the relation */
     scan_relid = foreignrel->relid;
 
@@ -1041,7 +899,6 @@ ForeignScan * db2GetForeignPlan (PlannerInfo * root, RelOptInfo * foreignrel, Oi
 	if (fdwState->db2Table->cols[i]->pgname)
 	  fdwState->db2Table->cols[i]->used = 1;
     }
-#ifdef JOIN_API
   }
   else {
     /* we have a join relation, so set scan_relid to 0 */
@@ -1087,7 +944,6 @@ ForeignScan * db2GetForeignPlan (PlannerInfo * root, RelOptInfo * foreignrel, Oi
       }
     }
   }
-#endif /* JOIN_API */
 
   /* create remote query */
   fdwState->query = createQuery (fdwState, foreignrel, for_update, best_path->path.pathkeys);
@@ -1109,10 +965,8 @@ ForeignScan * db2GetForeignPlan (PlannerInfo * root, RelOptInfo * foreignrel, Oi
    * because then they wouldn't be subject to later planner processing.
    */
   return make_foreignscan (tlist, local_exprs, scan_relid, fdwState->params, fdw_private
-#if PG_VERSION_NUM >= 90500
 			   , fdw_scan_tlist, NIL,	/* no parameterized paths */
 			   outer_plan
-#endif /* PG_VERSION_NUM */
     );
 }
 
@@ -1125,7 +979,6 @@ db2AnalyzeForeignTable (Relation relation, AcquireSampleRowsFunc * func, BlockNu
 
   return true;
 }
-#endif /* OLD_FDW_API */
 
 void db2Explain (void * fdw, ExplainState * es)
 {
@@ -1192,14 +1045,10 @@ void
 db2BeginForeignScan (ForeignScanState * node, int eflags)
 {
   ForeignScan *fsplan = (ForeignScan *) node->ss.ps.plan;
-#ifdef OLD_FDW_API
-  List *fdw_private = ((FdwPlan *) fsplan->fdwplan)->fdw_private;
-#else
   List *fdw_private = fsplan->fdw_private;
   List *exec_exprs;
   ListCell *cell;
   int index;
-#endif /* OLD_FDW_API */
   struct paramDesc *paramDesc;
   struct DB2FdwState *fdw_state;
 
@@ -1207,7 +1056,6 @@ db2BeginForeignScan (ForeignScanState * node, int eflags)
   fdw_state = deserializePlanData (fdw_private);
   node->fdw_state = (void *) fdw_state;
 
-#ifndef OLD_FDW_API
   /* create an ExprState tree for the parameter expressions */
 #if PG_VERSION_NUM < 100000
   exec_exprs = (List *) ExecInitExpr ((Expr *) fsplan->fdw_exprs, (PlanState *) node);
@@ -1245,7 +1093,6 @@ db2BeginForeignScan (ForeignScanState * node, int eflags)
     paramDesc->next = fdw_state->paramList;
     fdw_state->paramList = paramDesc;
   }
-#endif /* OLD_FDW_API */
 
   /* add a fake parameter ":now" if that string appears in the query */
   if (strstr (fdw_state->query, ":now") != NULL) {
@@ -1268,11 +1115,7 @@ db2BeginForeignScan (ForeignScanState * node, int eflags)
 
   /* connect to DB2 database */
   fdw_state->session = db2GetSession (fdw_state->dbserver, fdw_state->user, fdw_state->password, fdw_state->nls_lang, fdw_state->db2Table->pgname,
-#ifdef WRITE_API
 				      GetCurrentTransactionNestLevel ()
-#else
-				      1
-#endif /* WRITE_API */
     );
 
   /* initialize row count to zero */
@@ -1371,7 +1214,6 @@ db2ReScanForeignScan (ForeignScanState * node)
   fdw_state->rowcount = 0;
 }
 
-#ifdef WRITE_API
 /*
  * db2AddForeignUpdateTargets
  * 		Add the primary key columns as resjunk entries.
@@ -1455,11 +1297,9 @@ db2PlanForeignModify (PlannerInfo * root, ModifyTable * plan, Index resultRelati
   Bitmapset *tmpset;
   AttrNumber col;
 
-#if PG_VERSION_NUM >= 90500
   /* we don't support INSERT ... ON CONFLICT */
   if (plan->onConflictAction != ONCONFLICT_NONE)
     ereport (ERROR, (errcode (ERRCODE_FDW_UNABLE_TO_CREATE_EXECUTION), errmsg ("INSERT with ON CONFLICT clause is not supported")));
-#endif /* PG_VERSION_NUM */
 
   /* check if the foreign table is scanned */
   if (resultRelation < root->simple_rel_array_size && root->simple_rel_array[resultRelation] != NULL) {
@@ -1504,11 +1344,7 @@ db2PlanForeignModify (PlannerInfo * root, ModifyTable * plan, Index resultRelati
 
     break;
   case CMD_UPDATE:
-#if PG_VERSION_NUM >= 90500
     tmpset = bms_copy (rte->updatedCols);
-#else
-    tmpset = bms_copy (rte->modifiedCols);
-#endif /* PG_VERSION_NUM */
 
     while ((col = bms_first_member (tmpset)) >= 0) {
       col += FirstLowInvalidHeapAttributeNumber;
@@ -1987,9 +1823,7 @@ db2IsForeignRelUpdatable (Relation rel)
 
   return (1 << CMD_UPDATE) | (1 << CMD_INSERT) | (1 << CMD_DELETE);
 }
-#endif /* WRITE_API */
 
-#ifdef IMPORT_API
 /*
  * db2ImportForeignSchema
  * 		Returns a List of CREATE FOREIGN TABLE statements.
@@ -2157,6 +1991,9 @@ db2ImportForeignSchema (ImportForeignSchemaStmt * stmt, Oid serverOid)
 	else
 	  appendStringInfo (&buf, "numeric");
 	break;
+      case SQL_TYPE_XML:
+	appendStringInfo (&buf, "bytea");
+	break;
       case SQL_TYPE_BLOB:
 	appendStringInfo (&buf, "bytea");
 	break;
@@ -2187,7 +2024,6 @@ db2ImportForeignSchema (ImportForeignSchemaStmt * stmt, Oid serverOid)
 
   return result;
 }
-#endif /* IMPORT_API */
 
 /*
  * getFdwState
@@ -2263,11 +2099,7 @@ getFdwState (Oid foreigntableid, double *sample_percent)
 
   /* connect to DB2 database */
   fdwState->session = db2GetSession (fdwState->dbserver, fdwState->user, fdwState->password, fdwState->nls_lang, pgtablename,
-#ifdef WRITE_API
 				     GetCurrentTransactionNestLevel ()
-#else
-				     1
-#endif /* WRITE_API */
     );
 
   /* get remote table description */
@@ -2334,10 +2166,8 @@ getColumnData (Oid foreigntableid, struct db2Table *db2Table)
   index = 0;
   for (i = 0; i < tupdesc->natts; ++i) {
     Form_pg_attribute att_tuple = TupleDescAttr (tupdesc, i);
-#ifndef OLD_FDW_API
     List *options;
     ListCell *option;
-#endif /* OLD_FDW_API */
 
     /* ignore dropped columns */
     if (att_tuple->attisdropped)
@@ -2352,7 +2182,6 @@ getColumnData (Oid foreigntableid, struct db2Table *db2Table)
       db2Table->cols[index - 1]->pgname = pstrdup (NameStr (att_tuple->attname));
     }
 
-#ifndef OLD_FDW_API
     /* loop through column options */
     options = GetForeignColumnOptions (foreigntableid, att_tuple->attnum);
     foreach (option, options) {
@@ -2364,7 +2193,6 @@ getColumnData (Oid foreigntableid, struct db2Table *db2Table)
 	db2Table->cols[index - 1]->pkey = 1;
       }
     }
-#endif /* OLD_FDW_API */
   }
 
   heap_close (rel, NoLock);
@@ -2390,15 +2218,9 @@ createQuery (struct DB2FdwState *fdwState, RelOptInfo * foreignrel, bool modify,
   StringInfoData query, result;
   List *columnlist, *conditions = foreignrel->baserestrictinfo;
 
-#if PG_VERSION_NUM < 90600
-  columnlist = foreignrel->reltargetlist;
-#else
   columnlist = foreignrel->reltarget->exprs;
-#endif
 
-#ifdef JOIN_API
   if (IS_SIMPLE_REL (foreignrel))
-#endif /* JOIN_API */
   {
     /* find all the columns to include in the select list */
 
@@ -2441,9 +2263,7 @@ createQuery (struct DB2FdwState *fdwState, RelOptInfo * foreignrel, bool modify,
    * to fdwState->joinclauses and have already been added above,
    * so there is no extra WHERE clause.
    */
-#ifdef JOIN_API
   if (IS_SIMPLE_REL (foreignrel))
-#endif /* JOIN_API */
   {
     /* append WHERE clauses */
     if (fdwState->where_clause)
@@ -2506,13 +2326,10 @@ createQuery (struct DB2FdwState *fdwState, RelOptInfo * foreignrel, bool modify,
 static void
 deparseFromExprForRel (struct DB2FdwState *fdwState, StringInfo buf, RelOptInfo * foreignrel, List ** params_list)
 {
-#ifdef JOIN_API
   if (IS_SIMPLE_REL (foreignrel)) {
-#endif /* JOIN_API */
     appendStringInfo (buf, "%s", fdwState->db2Table->name);
 
     appendStringInfo (buf, " %s%d", REL_ALIAS_PREFIX, foreignrel->relid);
-#ifdef JOIN_API
   }
   else {
     /* join relation */
@@ -2545,10 +2362,8 @@ deparseFromExprForRel (struct DB2FdwState *fdwState, StringInfo buf, RelOptInfo 
     /* End the FROM clause entry. */
     appendStringInfo (buf, ")");
   }
-#endif /* JOIN_API */
 }
 
-#ifdef JOIN_API
 /*
  * appendConditions
  * 		Deparse conditions from the provided list and append them to buf.
@@ -2822,9 +2637,7 @@ build_tlist_to_deparse (RelOptInfo * foreignrel)
 
   return tlist;
 }
-#endif /* JOIN_API */
 
-#ifndef OLD_FDW_API
 /*
  * acquireSampleRowsFunc
  * 		Perform a sequential scan on the DB2 table and return a sampe of rows.
@@ -2992,7 +2805,6 @@ appendAsType (StringInfoData * dest, const char *s, Oid type)
     appendStringInfo (dest, "%s", s);
   }
 }
-#endif /* OLD_FDW_API */
 
 /*
  * This macro is used by deparseExpr to identify PostgreSQL
@@ -4204,8 +4016,11 @@ getUsedColumns (Expr * expr, struct db2Table *db2Table)
 void
 checkDataType (db2Type db2type, int scale, Oid pgtype, const char *tablename, const char *colname)
 {
+  db2Debug2("checkDataType: db2type: %d   pgtype: %d",db2type,pgtype);
   /* the binary DB2 types can be converted to bytea */
   if (db2type == SQL_TYPE_BLOB && pgtype == BYTEAOID)
+    return;
+  if (db2type == SQL_TYPE_XML && pgtype == BYTEAOID)
     return;
 
 
@@ -5010,23 +4825,17 @@ void
 transactionCallback (XactEvent event, void *arg)
 {
   switch (event) {
-#ifdef WRITE_API
   case XACT_EVENT_PRE_COMMIT:
-#if PG_VERSION_NUM >= 90500
   case XACT_EVENT_PARALLEL_PRE_COMMIT:
-#endif /* PG_VERSION_NUM */
     /* remote commit */
     db2EndTransaction (arg, 1, 0);
     break;
   case XACT_EVENT_PRE_PREPARE:
     ereport (ERROR, (errcode (ERRCODE_FDW_UNABLE_TO_CREATE_EXECUTION), errmsg ("cannot prepare a transaction that used remote tables")));
     break;
-#endif /* WRITE_API */
   case XACT_EVENT_COMMIT:
   case XACT_EVENT_PREPARE:
-#if PG_VERSION_NUM >= 90500
   case XACT_EVENT_PARALLEL_COMMIT:
-#endif /* PG_VERSION_NUM */
     /*
      * Commit the remote transaction ignoring errors.
      * In 9.3 or higher, the transaction must already be closed, so this does nothing.
@@ -5035,9 +4844,7 @@ transactionCallback (XactEvent event, void *arg)
     db2EndTransaction (arg, 1, 1);
     break;
   case XACT_EVENT_ABORT:
-#if PG_VERSION_NUM >= 90500
   case XACT_EVENT_PARALLEL_ABORT:
-#endif /* PG_VERSION_NUM */
     /* remote rollback */
     db2EndTransaction (arg, 0, 1);
     break;
@@ -5434,64 +5241,27 @@ db2SetHandlers ()
 	(x==FDW_UNABLE_TO_CREATE_EXECUTION ? ERRCODE_FDW_UNABLE_TO_CREATE_EXECUTION : \
 	(x==FDW_OUT_OF_MEMORY ? ERRCODE_FDW_OUT_OF_MEMORY : \
 	(x==FDW_SERIALIZATION_FAILURE ? ERRCODE_T_R_SERIALIZATION_FAILURE : ERRCODE_FDW_ERROR))))))
-
 /*
- * db2Error_d
- * 		Report a PostgreSQL error with a detail message.
- */
-void
-db2Error_d (db2error sqlstate, const char *message, const char *detail)
+ *  * db2Error_d
+ *   * 		Report a PostgreSQL error with a detail message.
+ *    */
+void db2Error_d (db2error sqlstate, const char *message, const char *detail, ...)
 {
+  char cBuffer [4000];
+  va_list arg_marker;
+
   /* if the backend was terminated, report that rather than the DB2 error */
   CHECK_FOR_INTERRUPTS ();
-
-  ereport (ERROR, (errcode (to_sqlstate (sqlstate)), errmsg ("%s", message), errdetail ("%s", detail)));
+  va_start (arg_marker, detail);
+  vsprintf (cBuffer, detail, arg_marker);
+  ereport (ERROR, (errcode (to_sqlstate (sqlstate)), errmsg ("%s", message), errdetail ("%s", cBuffer)));
+  va_end   (arg_marker);
 }
 
 /*
- * db2Error_sd
- * 		Report a PostgreSQL error with a string argument and a detail message.
- */
-void
-db2Error_sd (db2error sqlstate, const char *message, const char *arg, const char *detail)
-{
-  ereport (NOTICE, (errcode (to_sqlstate (sqlstate)), errmsg (message, arg), errdetail ("%s", detail)));
-}
-
-/*
- * db2Error_ssdh
- * 		Report a PostgreSQL error with two string arguments, a detail message and a hint.
- */
-void
-db2Error_ssdh (db2error sqlstate, const char *message, const char *arg1, const char *arg2, const char *detail, const char *hint)
-{
-  ereport (ERROR, (errcode (to_sqlstate (sqlstate)), errmsg (message, arg1, arg2), errdetail ("%s", detail), errhint ("%s", hint)));
-}
-
-/*
- * db2Error_ii
- * 		Report a PostgreSQL error with 2 integer arguments.
- */
-void
-db2Error_ii (db2error sqlstate, const char *message, int arg1, int arg2)
-{
-  ereport (ERROR, (errcode (to_sqlstate (sqlstate)), errmsg (message, arg1, arg2)));
-}
-
-/*
- * db2Error_i
- * 		Report a PostgreSQL error with integer argument.
- */
-void
-db2Error_i (db2error sqlstate, const char *message, int arg)
-{
-  ereport (ERROR, (errcode (to_sqlstate (sqlstate)), errmsg (message, arg)));
-}
-
-/*
- * db2error
- * 		Report a PostgreSQL error without detail message.
- */
+ *  * db2error
+ *   * 		Report a PostgreSQL error without detail message.
+ *    */
 void
 db2Error (db2error sqlstate, const char *message)
 {
@@ -5504,12 +5274,45 @@ db2Error (db2error sqlstate, const char *message)
   }
 }
 
-/*
- * db2Debug2
- * 		Report a PostgreSQL message at level DEBUG2.
- */
-void
-db2Debug2 (const char *message)
+/********************************************************************************/
+/********************************************************************************/
+/*   db2Debug2,debug3 4 5                                                       */
+/*   Report a PostgreSQL message at level DEBUG2.                               */
+/********************************************************************************/
+void db2Debug2 (const char *message, ...)
 {
-  elog (DEBUG2, "%s", message);
+char cBuffer [4000];
+va_list arg_marker;
+va_start (arg_marker, message);
+vsprintf (cBuffer, message, arg_marker);
+elog (DEBUG2, "%s", cBuffer);
+va_end   (arg_marker);
+}
+
+void db2Debug3 (const char *message, ...)
+{
+char cBuffer [4000];
+va_list arg_marker;
+va_start (arg_marker, message);
+vsprintf (cBuffer, message, arg_marker);
+elog (DEBUG3, "%s", cBuffer);
+va_end   (arg_marker);
+}
+void db2Debug4 (const char *message, ...)
+{
+char cBuffer [4000];
+va_list arg_marker;
+va_start (arg_marker, message);
+vsprintf (cBuffer, message, arg_marker);
+elog (DEBUG4, "%s", cBuffer);
+va_end   (arg_marker);
+}
+void db2Debug5 (const char *message, ...)
+{
+char cBuffer [4000];
+va_list arg_marker;
+va_start (arg_marker, message);
+vsprintf (cBuffer, message, arg_marker);
+elog (DEBUG5, "%s", cBuffer);
+va_end   (arg_marker);
 }
