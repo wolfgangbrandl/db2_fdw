@@ -2796,10 +2796,10 @@ appendAsType (StringInfoData * dest, const char *s, Oid type)
     appendStringInfo (dest, "CAST (%s AS TIMESTAMP WITH TIME ZONE)", s);
     break;
   case TIMEOID:
-    appendStringInfo (dest, "(CAST ('%s' AS TIME))", s);
+    appendStringInfo (dest, "(CAST (%s AS TIME))", s);
     break;
   case TIMETZOID:
-    appendStringInfo (dest, "(CAST ('%s' AS TIME WITH TIME ZONE))", s);
+    appendStringInfo (dest, "(CAST (%s AS TIME WITH TIME ZONE))", s);
     break;
   default:
     appendStringInfo (dest, "%s", s);
