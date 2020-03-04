@@ -40,16 +40,16 @@
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/pg_list.h"
-#include "nodes/relation.h"
 #include "optimizer/cost.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/planmain.h"
 #include "optimizer/restrictinfo.h"
 #include "optimizer/tlist.h"
-#include "optimizer/var.h"
+#include "optimizer/optimizer.h"
 #include "parser/parse_relation.h"
 #include "parser/parsetree.h"
 #include "port.h"
+
 #include "storage/ipc.h"
 #include "storage/lock.h"
 #include "tcop/tcopprot.h"
@@ -67,10 +67,19 @@
 #include "utils/rel.h"
 #include "utils/resowner.h"
 #include "utils/timestamp.h"
-#include "utils/tqual.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
+#if PG_VERSION_NUM < 120000
+#include "nodes/relation.h"
+#include "optimizer/var.h"
+#include "utils/tqual.h"
+#else
+#include "nodes/pathnodes.h"
+#include "optimizer/optimizer.h"
+#include "access/heapam.h"
+#endif
+
 
 #include <string.h>
 #include <stdlib.h>
@@ -111,6 +120,8 @@
 #ifndef JSONOID
 #define JSONOID InvalidOid
 #endif
+/* "table_open" was "heap_open" before v12 */
+
 
 PG_MODULE_MAGIC;
 
@@ -282,12 +293,12 @@ static void appendConditions (List * exprs, StringInfo buf, RelOptInfo * joinrel
 static bool foreign_join_ok (PlannerInfo * root, RelOptInfo * joinrel, JoinType jointype, RelOptInfo * outerrel, RelOptInfo * innerrel, JoinPathExtraData * extra);
 static const char *get_jointype_name (JoinType jointype);
 static List *build_tlist_to_deparse (RelOptInfo * foreignrel);
-static void getColumnData (Oid foreigntableid, struct db2Table *db2Table);
+static void getColumnData (struct db2Table *db2Table, Oid foreigntableid);
 static int acquireSampleRowsFunc (Relation relation, int elevel, HeapTuple * rows, int targrows, double *totalrows, double *totaldeadrows);
 static void appendAsType (StringInfoData * dest, const char *s, Oid type);
 static char *deparseExpr (db2Session * session, RelOptInfo * foreignrel, Expr * expr, const struct db2Table *db2Table, List ** params);
 static char *datumToString (Datum datum, Oid type);
-static void getUsedColumns (Expr * expr, struct db2Table *db2Table);
+static void getUsedColumns (Expr * expr, struct db2Table *db2Table, int foreignrelid);
 static void checkDataType (db2Type db2type, int scale, Oid pgtype, const char *tablename, const char *colname);
 static char *deparseWhereConditions (struct DB2FdwState *fdwState, RelOptInfo * baserel, List ** local_conds, List ** remote_conds);
 static char *guessNlsLang (char *nls_lang);
@@ -541,15 +552,20 @@ db2_diag (PG_FUNCTION_ARGS)
     char *nls_lang = NULL, *user = NULL, *password = NULL, *dbserver = NULL;
 
     /* look up foreign server with this name */
-    rel = heap_open (ForeignServerRelationId, AccessShareLock);
+    rel = table_open (ForeignServerRelationId, AccessShareLock);
 
     tup = SearchSysCacheCopy1 (FOREIGNSERVERNAME, NameGetDatum (srvname));
     if (!HeapTupleIsValid (tup))
       ereport (ERROR, (errcode (ERRCODE_UNDEFINED_OBJECT), errmsg ("server \"%s\" does not exist", NameStr (*srvname))));
 
-    srvId = HeapTupleGetOid (tup);
+#if PG_VERSION_NUM < 120000
+     srvId = HeapTupleGetOid(tup);
+#else
+     srvId = ((Form_pg_foreign_server)GETSTRUCT(tup))->oid;
+#endif
 
-    heap_close (rel, AccessShareLock);
+
+    table_close (rel, AccessShareLock);
 
     /* get the foreign server, the user mapping and the FDW */
     server = GetForeignServer (srvId);
@@ -885,13 +901,13 @@ ForeignScan * db2GetForeignPlan (PlannerInfo * root, RelOptInfo * foreignrel, Oi
      * Core code already has some lock on each rel being planned, so we can
      * use NoLock here.
      */
-    rel = heap_open (foreigntableid, NoLock);
+    rel = table_open (foreigntableid, NoLock);
 
     /* is there an AFTER trigger FOR EACH ROW? */
     has_trigger = (foreignrel->relid == root->parse->resultRelation) && rel->trigdesc && ((root->parse->commandType == CMD_UPDATE && rel->trigdesc->trig_update_after_row)
 											  || (root->parse->commandType == CMD_DELETE && rel->trigdesc->trig_delete_after_row));
 
-    heap_close (rel, NoLock);
+    table_close (rel, NoLock);
 
     if (has_trigger) {
       /* we need to fetch and return all columns */
@@ -1317,7 +1333,7 @@ db2PlanForeignModify (PlannerInfo * root, ModifyTable * plan, Index resultRelati
    * Core code already has some lock on each rel being planned, so we can
    * use NoLock here.
    */
-  rel = heap_open (rte->relid, NoLock);
+  rel = table_open (rte->relid, NoLock); 
 
   /* figure out which attributes are affected and if there is a trigger */
   switch (operation) {
@@ -1367,7 +1383,7 @@ db2PlanForeignModify (PlannerInfo * root, ModifyTable * plan, Index resultRelati
     elog (ERROR, "unexpected operation: %d", (int) operation);
   }
 
-  heap_close (rel, NoLock);
+  table_close (rel, NoLock);
 
   /* mark all attributes for which we need a RETURNING clause */
   if (has_trigger) {
@@ -2106,7 +2122,7 @@ getFdwState (Oid foreigntableid, double *sample_percent)
   fdwState->db2Table = db2Describe (fdwState->session, schema, table, pgtablename, max_long);
 
   /* add PostgreSQL data to table description */
-  getColumnData (foreigntableid, fdwState->db2Table);
+  getColumnData (fdwState->db2Table, foreigntableid);
 
   return fdwState;
 }
@@ -2150,13 +2166,14 @@ db2GetOptions (Oid foreigntableid, List ** options)
  * 		For PostgreSQL 9.2 and better, find the primary key columns and mark them in db2Table.
  */
 void
-getColumnData (Oid foreigntableid, struct db2Table *db2Table)
+getColumnData (struct db2Table *db2Table, Oid foreigntableid)
 {
   Relation rel;
   TupleDesc tupdesc;
   int i, index;
 
-  rel = heap_open (foreigntableid, NoLock);
+  rel = table_open (foreigntableid, NoLock);
+  printf("getColumnData: rel %x\n",rel);
   tupdesc = rel->rd_att;
 
   /* number of PostgreSQL columns */
@@ -2195,7 +2212,7 @@ getColumnData (Oid foreigntableid, struct db2Table *db2Table)
     }
   }
 
-  heap_close (rel, NoLock);
+  table_close (rel, NoLock);
 }
 
 /*
@@ -2219,6 +2236,11 @@ createQuery (struct DB2FdwState *fdwState, RelOptInfo * foreignrel, bool modify,
   List *columnlist, *conditions = foreignrel->baserestrictinfo;
 
   columnlist = foreignrel->reltarget->exprs;
+#if PG_VERSION_NUM < 90600
+  columnlist = foreignrel->reltargetlist;
+#else
+  columnlist = foreignrel->reltarget->exprs;
+#endif
 
   if (IS_SIMPLE_REL (foreignrel))
   {
@@ -2226,12 +2248,12 @@ createQuery (struct DB2FdwState *fdwState, RelOptInfo * foreignrel, bool modify,
 
     /* examine each SELECT list entry for Var nodes */
     foreach (cell, columnlist) {
-      getUsedColumns ((Expr *) lfirst (cell), fdwState->db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), fdwState->db2Table,foreignrel->relid);
     }
 
     /* examine each condition for Var nodes */
     foreach (cell, conditions) {
-      getUsedColumns ((Expr *) lfirst (cell), fdwState->db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), fdwState->db2Table,foreignrel->relid);
     }
   }
 
@@ -3797,7 +3819,7 @@ datumToString (Datum datum, Oid type)
  * 		Set "used=true" in db2Table for all columns used in the expression.
  */
 void
-getUsedColumns (Expr * expr, struct db2Table *db2Table)
+getUsedColumns (Expr * expr, struct db2Table *db2Table, int foreignrelid)
 {
   ListCell *cell;
   Var *variable;
@@ -3808,16 +3830,19 @@ getUsedColumns (Expr * expr, struct db2Table *db2Table)
 
   switch (expr->type) {
   case T_RestrictInfo:
-    getUsedColumns (((RestrictInfo *) expr)->clause, db2Table);
+    getUsedColumns (((RestrictInfo *) expr)->clause, db2Table, foreignrelid);
     break;
   case T_TargetEntry:
-    getUsedColumns (((TargetEntry *) expr)->expr, db2Table);
+    getUsedColumns (((TargetEntry *) expr)->expr, db2Table, foreignrelid);
     break;
   case T_Const:
   case T_Param:
   case T_CaseTestExpr:
   case T_CoerceToDomainValue:
   case T_CurrentOfExpr:
+#if PG_VERSION_NUM >= 100000
+  case T_NextValueExpr:
+#endif
     break;
   case T_Var:
     variable = (Var *) expr;
@@ -3850,148 +3875,160 @@ getUsedColumns (Expr * expr, struct db2Table *db2Table)
     break;
   case T_Aggref:
     foreach (cell, ((Aggref *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     foreach (cell, ((Aggref *) expr)->aggorder) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     foreach (cell, ((Aggref *) expr)->aggdistinct) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_WindowFunc:
     foreach (cell, ((WindowFunc *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
+#if PG_VERSION_NUM < 120000
   case T_ArrayRef:
-    foreach (cell, ((ArrayRef *) expr)->refupperindexpr) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+    {
+    ArrayRef *ref = (ArrayRef *)expr;
+#else
+  case T_SubscriptingRef:
+    {
+    SubscriptingRef *ref = (SubscriptingRef *)expr;
+#endif
+    foreach(cell, ref->refupperindexpr)
+    {
+      getUsedColumns((Expr *)lfirst(cell), db2Table, foreignrelid);
     }
-    foreach (cell, ((ArrayRef *) expr)->reflowerindexpr) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+    foreach(cell, ref->reflowerindexpr)
+    {
+      getUsedColumns((Expr *)lfirst(cell), db2Table, foreignrelid);
     }
-    getUsedColumns (((ArrayRef *) expr)->refexpr, db2Table);
-    getUsedColumns (((ArrayRef *) expr)->refassgnexpr, db2Table);
+    getUsedColumns(ref->refexpr, db2Table, foreignrelid);
+    getUsedColumns(ref->refassgnexpr, db2Table, foreignrelid);
     break;
+    }
+
   case T_FuncExpr:
     foreach (cell, ((FuncExpr *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_OpExpr:
     foreach (cell, ((OpExpr *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_DistinctExpr:
     foreach (cell, ((DistinctExpr *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_NullIfExpr:
     foreach (cell, ((NullIfExpr *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_ScalarArrayOpExpr:
     foreach (cell, ((ScalarArrayOpExpr *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_BoolExpr:
     foreach (cell, ((BoolExpr *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_SubPlan:
     foreach (cell, ((SubPlan *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_AlternativeSubPlan:
     /* examine only first alternative */
-    getUsedColumns ((Expr *) linitial (((AlternativeSubPlan *) expr)->subplans), db2Table);
+    getUsedColumns ((Expr *) linitial (((AlternativeSubPlan *) expr)->subplans), db2Table, foreignrelid);
     break;
   case T_NamedArgExpr:
-    getUsedColumns (((NamedArgExpr *) expr)->arg, db2Table);
+    getUsedColumns (((NamedArgExpr *) expr)->arg, db2Table, foreignrelid);
     break;
   case T_FieldSelect:
-    getUsedColumns (((FieldSelect *) expr)->arg, db2Table);
+    getUsedColumns (((FieldSelect *) expr)->arg, db2Table, foreignrelid);
     break;
   case T_RelabelType:
-    getUsedColumns (((RelabelType *) expr)->arg, db2Table);
+    getUsedColumns (((RelabelType *) expr)->arg, db2Table, foreignrelid);
     break;
   case T_CoerceViaIO:
-    getUsedColumns (((CoerceViaIO *) expr)->arg, db2Table);
+    getUsedColumns (((CoerceViaIO *) expr)->arg, db2Table, foreignrelid);
     break;
   case T_ArrayCoerceExpr:
-    getUsedColumns (((ArrayCoerceExpr *) expr)->arg, db2Table);
+    getUsedColumns (((ArrayCoerceExpr *) expr)->arg, db2Table, foreignrelid);
     break;
   case T_ConvertRowtypeExpr:
-    getUsedColumns (((ConvertRowtypeExpr *) expr)->arg, db2Table);
+    getUsedColumns (((ConvertRowtypeExpr *) expr)->arg, db2Table, foreignrelid);
     break;
   case T_CollateExpr:
-    getUsedColumns (((CollateExpr *) expr)->arg, db2Table);
+    getUsedColumns (((CollateExpr *) expr)->arg, db2Table, foreignrelid);
     break;
   case T_CaseExpr:
     foreach (cell, ((CaseExpr *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
-    getUsedColumns (((CaseExpr *) expr)->arg, db2Table);
-    getUsedColumns (((CaseExpr *) expr)->defresult, db2Table);
+    getUsedColumns (((CaseExpr *) expr)->arg, db2Table, foreignrelid);
+    getUsedColumns (((CaseExpr *) expr)->defresult, db2Table, foreignrelid);
     break;
   case T_CaseWhen:
-    getUsedColumns (((CaseWhen *) expr)->expr, db2Table);
-    getUsedColumns (((CaseWhen *) expr)->result, db2Table);
+    getUsedColumns (((CaseWhen *) expr)->expr, db2Table, foreignrelid);
+    getUsedColumns (((CaseWhen *) expr)->result, db2Table, foreignrelid);
     break;
   case T_ArrayExpr:
     foreach (cell, ((ArrayExpr *) expr)->elements) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_RowExpr:
     foreach (cell, ((RowExpr *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_RowCompareExpr:
     foreach (cell, ((RowCompareExpr *) expr)->largs) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     foreach (cell, ((RowCompareExpr *) expr)->rargs) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_CoalesceExpr:
     foreach (cell, ((CoalesceExpr *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_MinMaxExpr:
     foreach (cell, ((MinMaxExpr *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_XmlExpr:
     foreach (cell, ((XmlExpr *) expr)->named_args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     foreach (cell, ((XmlExpr *) expr)->args) {
-      getUsedColumns ((Expr *) lfirst (cell), db2Table);
+      getUsedColumns ((Expr *) lfirst (cell), db2Table, foreignrelid);
     }
     break;
   case T_NullTest:
-    getUsedColumns (((NullTest *) expr)->arg, db2Table);
+    getUsedColumns (((NullTest *) expr)->arg, db2Table, foreignrelid);
     break;
   case T_BooleanTest:
-    getUsedColumns (((BooleanTest *) expr)->arg, db2Table);
+    getUsedColumns (((BooleanTest *) expr)->arg, db2Table, foreignrelid);
     break;
   case T_CoerceToDomain:
-    getUsedColumns (((CoerceToDomain *) expr)->arg, db2Table);
+    getUsedColumns (((CoerceToDomain *) expr)->arg, db2Table, foreignrelid);
     break;
   case T_PlaceHolderVar:
-    getUsedColumns (((PlaceHolderVar *) expr)->phexpr, db2Table);
+    getUsedColumns (((PlaceHolderVar *) expr)->phexpr, db2Table, foreignrelid);
     break;
 #if PG_VERSION_NUM >= 100000
   case T_SQLValueFunction:

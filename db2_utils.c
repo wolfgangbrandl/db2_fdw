@@ -1364,7 +1364,6 @@ db2ExecuteQuery (db2Session * session, const struct db2Table *db2Table, struct p
   sword result;
   ub4 rowcount;
   int param_count = 0;
-printstruct();
   for (param = paramList; param; param = param->next)
     ++param_count;
 
@@ -1480,7 +1479,6 @@ printstruct();
       }
     }
   }
-printstruct();
   /* execute the query and get the first result row */
   result = checkerr (OCIStmtExecute (session->connp->svchp, session->stmthp, session->envp->errhp, (ub4) 1, (ub4) 0,
 				     (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL, OCI_DEFAULT), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__);
@@ -1615,7 +1613,7 @@ db2ClientVersion (int *major, int *minor, int *update, int *patch, int *port_pat
 void
 db2ServerVersion (const char *connectstring, char *user, char *password, char * version, int len)
 {
-  OraText vers[len];
+  OraText vers[10000];
   OCIEnv *envhp = NULL;
   OCIError *errhp = NULL;
   OCISvcCtx *svchp = NULL;
