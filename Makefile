@@ -25,7 +25,7 @@ include $(PGXS)
 checkin: clean
 	git remote set-url origin git@github.com:wolfgangbrandl/db2_fdw.git
 	git add --all
-	git commit -m "Eliminate XML Type error"
+	git commit -m "Postgres 12.1"
 #	git commit -m "`date`"
 	git push -u origin master
 
