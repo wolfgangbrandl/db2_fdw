@@ -2173,7 +2173,6 @@ getColumnData (struct db2Table *db2Table, Oid foreigntableid)
   int i, index;
 
   rel = table_open (foreigntableid, NoLock);
-  printf("getColumnData: rel %x\n",rel);
   tupdesc = rel->rd_att;
 
   /* number of PostgreSQL columns */

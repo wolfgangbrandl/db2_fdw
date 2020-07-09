@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <pthread.h>
 #if defined _WIN32 || defined _WIN64
 /* for getpid */
 #include <process.h>
@@ -76,7 +77,7 @@ struct envEntry * findenvEntryHandle (struct envEntry * start, OCIEnv * envhp);
 int deleteenvEntry(struct envEntry * start, struct envEntry * node);
 int deleteenvEntryLang(struct envEntry * start, const char * nlslang);
 struct envEntry * insertenvEntry(struct envEntry * start, const char * nlslang, OCIEnv *envhp, OCIError *errhp);
-int printstruct();
+int printstruct(void);
 
 static void db2SetSavepoint (db2Session * session, int nest_level);
 static void setDB2Environment (char *nls_lang);
@@ -371,7 +372,7 @@ int printstruct()
   struct srvEntry *srvstep;
   struct connEntry *constep;
   char szBuffer[1000];
-  sprintf(szBuffer,"before calling pthread_create getpid: %d getpthread_self: %lu",getpid(), pthread_self());
+  sprintf(szBuffer,"before calling pthread_create getpid: %d getpthread_self: %d",getpid(), (int)pthread_self());
   db2Debug5("printstruct for: %s",szBuffer);
   for (envstep = rootenvEntry; envstep != NULL; envstep = envstep->right){
     db2Debug5("EnvEntry: %x",envstep);
@@ -1117,9 +1118,9 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
       db2Debug2("xml col: char_size: %d bin_size %d ",charsize,bin_size);
       reply->cols[i - 1]->db2type = SQL_TYPE_XML;
       reply->cols[i - 1]->val_size = charsize + 1;
-/*      reply->cols[i - 1]->val_size = bin_size * 4 + 1;
-/*      reply->cols[i - 1]->db2type = SQL_TYPE_OTHER;
-      reply->cols[i - 1]->val_size = 0;*/
+/*      reply->cols[i - 1]->val_size = bin_size * 4 + 1; */
+/*      reply->cols[i - 1]->db2type = SQL_TYPE_OTHER; */
+/*      reply->cols[i - 1]->val_size = 0;*/
     }
   }
 
