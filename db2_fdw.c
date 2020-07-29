@@ -45,7 +45,6 @@
 #include "optimizer/planmain.h"
 #include "optimizer/restrictinfo.h"
 #include "optimizer/tlist.h"
-#include "optimizer/optimizer.h"
 #include "parser/parse_relation.h"
 #include "parser/parsetree.h"
 #include "port.h"
@@ -121,6 +120,11 @@
 #define JSONOID InvalidOid
 #endif
 /* "table_open" was "heap_open" before v12 */
+#if PG_VERSION_NUM < 120000
+#define table_open(x, y) heap_open(x, y)
+#define table_close(x, y) heap_close(x, y)
+#endif  /* PG_VERSION_NUM */
+
 
 
 PG_MODULE_MAGIC;
