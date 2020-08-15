@@ -15,7 +15,7 @@
 #include <sys/types.h>
 
 /* db2_fdw version */
-#define DB2_FDW_VERSION "1.0devel"
+#define DB2_FDW_VERSION "3.0.3"
 
 #ifdef OCI_ORACLE
 /*
