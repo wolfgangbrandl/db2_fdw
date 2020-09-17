@@ -1690,7 +1690,10 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
   const char *const column_query = 
     "select A.TABLE_NAME,B.NAME,COLTYPE,LENGTH,SCALE,COLNO \n"
     "from sysibm.tables a,sysibm.SYSCOLUMNS b \n" 
-    "where table_schema=:nsp and (TABLE_TYPE like 'BASE TABLE%' OR TABLE_TYPE like 'VIEW') and A.TABLE_NAME = B.TBNAME \n" 
+    "where table_schema=:nsp \n"
+    "and (TABLE_TYPE like 'BASE TABLE%' OR TABLE_TYPE like 'VIEW') \n"
+    "and A.TABLE_NAME = B.TBNAME \n" 
+    "and A.TABLE_SCHEMA=B.TBCREATOR \n"
     "order by TABLE_NAME,COLNO";
   OCIBind *bndhp = NULL;
   sb2 ind = 0, ind_tabname, ind_colname, ind_typename, ind_charlen = OCI_IND_NOTNULL, ind_precision = OCI_IND_NOTNULL, ind_scale = OCI_IND_NOTNULL, ind_isnull, ind_key;
