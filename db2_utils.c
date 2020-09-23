@@ -1088,6 +1088,7 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
 	reply->cols[i - 1]->val_size = bin_size;
       else
 	reply->cols[i - 1]->val_size = ((-scale) > precision ? (-scale) : precision) + 5;
+      break; 
     case SQLT_FLT:
     case SQLT_BDOUBLE:
       /* FLOAT */

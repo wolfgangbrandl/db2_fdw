@@ -115,6 +115,16 @@
 #define TupleDescAttr(tupdesc, i) ((tupdesc)->attrs[(i)])
 #endif /* PG_VERSION_NUM */
 
+/* list API has changed in v13 */
+#if PG_VERSION_NUM < 130000
+#define list_next(l, e) lnext((e))
+#define do_each_cell(cell, list, element) for_each_cell(cell, (element))
+#else
+#define list_next(l, e) lnext((l), (e))
+#define do_each_cell(cell, list, element) for_each_cell(cell, (list), (element))
+#endif  /* PG_VERSION_NUM */
+
+
 /* older versions don't have JSONOID */
 #ifndef JSONOID
 #define JSONOID InvalidOid
@@ -3356,7 +3366,8 @@ deparseExpr (db2Session * session, RelOptInfo * foreignrel, Expr * expr, const s
     initStringInfo (&result);
     appendStringInfo (&result, "(%s%s", boolexpr->boolop == NOT_EXPR ? "NOT " : "", arg);
 
-    for_each_cell (cell, lnext (list_head (boolexpr->args))) {
+    do_each_cell(cell, boolexpr->args, list_next(boolexpr->args, list_head(boolexpr->args)))
+      {     
       arg = deparseExpr (session, foreignrel, (Expr *) lfirst (cell), db2Table, params);
       if (arg == NULL) {
 	pfree (result.data);
@@ -4381,63 +4392,63 @@ deserializePlanData (List * list)
 
   /* dbserver */
   state->dbserver = deserializeString (lfirst (cell));
-  cell = lnext (cell);
+  cell = list_next (list,cell);
 
   /* user */
   state->user = deserializeString (lfirst (cell));
-  cell = lnext (cell);
+  cell = list_next (list,cell);
 
   /* password */
   state->password = deserializeString (lfirst (cell));
-  cell = lnext (cell);
+  cell = list_next (list,cell);
 
   /* nls_lang */
   state->nls_lang = deserializeString (lfirst (cell));
-  cell = lnext (cell);
+  cell = list_next (list,cell);
 
   /* query */
   state->query = deserializeString (lfirst (cell));
-  cell = lnext (cell);
+  cell = list_next (list,cell);
 
   /* DB2 prefetch count */
   state->prefetch = (unsigned int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-  cell = lnext (cell);
+  cell = list_next (list,cell);
 
   /* table data */
   state->db2Table = (struct db2Table *) palloc (sizeof (struct db2Table));
   state->db2Table->name = deserializeString (lfirst (cell));
-  cell = lnext (cell);
+  cell = list_next (list,cell);
   state->db2Table->pgname = deserializeString (lfirst (cell));
-  cell = lnext (cell);
+  cell = list_next (list,cell);
   state->db2Table->ncols = (int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-  cell = lnext (cell);
+  cell = list_next (list,cell);
   state->db2Table->npgcols = (int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-  cell = lnext (cell);
+  cell = list_next (list,cell);
   state->db2Table->cols = (struct db2Column **) palloc (sizeof (struct db2Column *) * state->db2Table->ncols);
 
   /* loop columns */
   for (i = 0; i < state->db2Table->ncols; ++i) {
     state->db2Table->cols[i] = (struct db2Column *) palloc (sizeof (struct db2Column));
     state->db2Table->cols[i]->name = deserializeString (lfirst (cell));
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     state->db2Table->cols[i]->db2type = (db2Type) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     state->db2Table->cols[i]->scale = (int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     state->db2Table->cols[i]->pgname = deserializeString (lfirst (cell));
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     state->db2Table->cols[i]->pgattnum = (int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     state->db2Table->cols[i]->pgtype = DatumGetObjectId (((Const *) lfirst (cell))->constvalue);
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     state->db2Table->cols[i]->pgtypmod = (int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     state->db2Table->cols[i]->used = (int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     state->db2Table->cols[i]->pkey = (int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     state->db2Table->cols[i]->val_size = deserializeLong (lfirst (cell));
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     /* allocate memory for the result value */
     state->db2Table->cols[i]->val = (char *) palloc (state->db2Table->cols[i]->val_size + 1);
     state->db2Table->cols[i]->val_len = 0;
@@ -4447,18 +4458,18 @@ deserializePlanData (List * list)
 
   /* length of parameter list */
   len = (int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-  cell = lnext (cell);
+  cell = list_next (list,cell);
 
   /* parameter table entries */
   state->paramList = NULL;
   for (i = 0; i < len; ++i) {
     param = (struct paramDesc *) palloc (sizeof (struct paramDesc));
     param->name = deserializeString (lfirst (cell));
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     param->type = DatumGetObjectId (((Const *) lfirst (cell))->constvalue);
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     param->bindType = (db2BindType) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     if (param->bindType == BIND_OUTPUT)
       param->value = (void *) 42;	/* something != NULL */
     else
@@ -4466,7 +4477,7 @@ deserializePlanData (List * list)
     param->node = NULL;
     param->bindh = NULL;
     param->colnum = (int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
-    cell = lnext (cell);
+    cell = list_next (list,cell);
     param->next = state->paramList;
     state->paramList = param;
   }
