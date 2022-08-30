@@ -41,7 +41,14 @@
 #include "nodes/nodeFuncs.h"
 #include "nodes/pg_list.h"
 #include "optimizer/cost.h"
+#if PG_VERSION_NUM >= 140000
+#include "optimizer/appendinfo.h"
+#endif  /* PG_VERSION_NUM */
 #include "optimizer/pathnode.h"
+#if PG_VERSION_NUM >= 130000
+#include "optimizer/paths.h"
+#endif  /* PG_VERSION_NUM */
+
 #include "optimizer/planmain.h"
 #include "optimizer/restrictinfo.h"
 #include "optimizer/tlist.h"
@@ -285,7 +292,13 @@ static void db2BeginForeignScan (ForeignScanState * node, int eflags);
 static TupleTableSlot *db2IterateForeignScan (ForeignScanState * node);
 static void db2EndForeignScan (ForeignScanState * node);
 static void db2ReScanForeignScan (ForeignScanState * node);
-static void db2AddForeignUpdateTargets (Query * parsetree, RangeTblEntry * target_rte, Relation target_relation);
+
+#if PG_VERSION_NUM < 140000
+static void db2AddForeignUpdateTargets(Query *parsetree, RangeTblEntry *target_rte, Relation target_relation);
+#else
+static void db2AddForeignUpdateTargets(PlannerInfo *root, Index rtindex, RangeTblEntry *target_rte, Relation target_relation);
+#endif
+
 static List *db2PlanForeignModify (PlannerInfo * root, ModifyTable * plan, Index resultRelation, int subplan_index);
 static void db2BeginForeignModify (ModifyTableState * mtstate, ResultRelInfo * rinfo, List * fdw_private, int subplan_index, int eflags);
 static TupleTableSlot *db2ExecForeignInsert (EState * estate, ResultRelInfo * rinfo, TupleTableSlot * slot, TupleTableSlot * planSlot);
@@ -323,7 +336,9 @@ static struct DB2FdwState *deserializePlanData (List * list);
 static char *deserializeString (Const * constant);
 static long deserializeLong (Const * constant);
 static bool optionIsTrue (const char *value);
-static Expr *find_em_expr_for_rel (EquivalenceClass * ec, RelOptInfo * rel);
+/*
+ * static Expr *find_em_expr_for_rel (EquivalenceClass * ec, RelOptInfo * rel);
+ */
 static char *deparseDate (Datum datum);
 static char *deparseTimestamp (Datum datum, bool hasTimezone);
 static char *deparseInterval (Datum datum);
@@ -838,7 +853,12 @@ db2GetForeignJoinPaths (PlannerInfo * root, RelOptInfo * joinrel, RelOptInfo * o
     return;
 
   /* estimate the number of result rows for the join */
-  if (outerrel->pages > 0 && innerrel->pages > 0) {
+#if PG_VERSION_NUM < 140000
+  if (outerrel->pages > 0 && innerrel->pages > 0)
+#else
+  if (outerrel->tuples >= 0 && innerrel->tuples >= 0)
+#endif  /* PG_VERSION_NUM */
+  {
     /* both relations have been ANALYZEd, so there should be useful statistics */
     joinclauses_selectivity = clauselist_selectivity (root, fdwState->joinclauses, 0, JOIN_INNER, extra->sjinfo);
     rows = clamp_row_est (innerrel->tuples * outerrel->tuples * joinclauses_selectivity);
@@ -893,7 +913,13 @@ ForeignScan * db2GetForeignPlan (PlannerInfo * root, RelOptInfo * foreignrel, Oi
     scan_relid = foreignrel->relid;
 
     /* check if the foreign scan is for an UPDATE or DELETE */
-    if (foreignrel->relid == root->parse->resultRelation && (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE)) {
+#if PG_VERSION_NUM < 140000
+    if (foreignrel->relid == root->parse->resultRelation && (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE))
+#else
+    if (bms_is_member(foreignrel->relid, root->all_result_relids) && (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE))
+#endif  /* PG_VERSION_NUM */
+    {
+
       /* we need the table's primary key columns */
       need_keys = true;
     }
@@ -1249,7 +1275,16 @@ db2ReScanForeignScan (ForeignScanState * node)
  * 		Add the primary key columns as resjunk entries.
  */
 void
-db2AddForeignUpdateTargets (Query * parsetree, RangeTblEntry * target_rte, Relation target_relation)
+db2AddForeignUpdateTargets (
+#if PG_VERSION_NUM < 140000
+        Query *parsetree,
+#else
+        PlannerInfo *root,
+        Index rtindex,
+#endif
+        RangeTblEntry *target_rte,
+        Relation target_relation
+)
 {
   Oid relid = RelationGetRelid (target_relation);
   TupleDesc tupdesc = target_relation->rd_att;
@@ -1274,17 +1309,38 @@ db2AddForeignUpdateTargets (Query * parsetree, RangeTblEntry * target_rte, Relat
       if (strcmp (def->defname, OPT_KEY) == 0) {
 	if (optionIsTrue (((Value *) (def->arg))->val.str)) {
 	  Var *var;
-	  TargetEntry *tle;
+#if PG_VERSION_NUM < 140000
+          TargetEntry *tle;
 
-	  /* Make a Var representing the desired value */
-	  var = makeVar (parsetree->resultRelation, attrno, att->atttypid, att->atttypmod, att->attcollation, 0);
+          /* Make a Var representing the desired value */
+          var = makeVar(
+            parsetree->resultRelation,
+            attrno,
+            att->atttypid,
+            att->atttypmod,
+            att->attcollation,
+            0);
 
-	  /* Wrap it in a resjunk TLE with the right name ... */
-	  tle = makeTargetEntry ((Expr *) var, list_length (parsetree->targetList) + 1, pstrdup (NameStr (att->attname)), true);
+          /* Wrap it in a resjunk TLE with the right name ... */
+          tle = makeTargetEntry((Expr *)var,
+            list_length(parsetree->targetList) + 1,
+            pstrdup(NameStr(att->attname)),
+            true);
 
-	  /* ... and add it to the query's targetlist */
-	  parsetree->targetList = lappend (parsetree->targetList, tle);
+          /* ... and add it to the query's targetlist */
+          parsetree->targetList = lappend(parsetree->targetList, tle);
+#else
+          /* Make a Var representing the desired value */
+          var = makeVar(
+            rtindex,
+            attrno,
+            att->atttypid,
+            att->atttypmod,
+            att->attcollation,
+            0);
 
+          add_row_identity_var(root, var, rtindex, NameStr(att->attname));
+#endif  /* PG_VERSION_NUM */
 	  has_key = true;
 	}
       }
@@ -1625,7 +1681,11 @@ db2BeginForeignModify (ModifyTableState * mtstate, ResultRelInfo * rinfo, List *
   struct paramDesc *param;
   HeapTuple tuple;
   int i;
-  Plan *subplan = mtstate->mt_plans[subplan_index]->plan;
+#if PG_VERSION_NUM < 140000
+        Plan *subplan = mtstate->mt_plans[subplan_index]->plan;
+#else
+        Plan *subplan = outerPlanState(mtstate)->plan;
+#endif
 
   elog (DEBUG1, "db2_fdw: begin foreign table modify on %d", RelationGetRelid (rinfo->ri_RelationDesc));
 
