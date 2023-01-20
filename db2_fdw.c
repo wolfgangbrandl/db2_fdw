@@ -41,6 +41,7 @@
 #include "nodes/nodeFuncs.h"
 #include "nodes/pg_list.h"
 #include "optimizer/cost.h"
+
 #if PG_VERSION_NUM >= 140000
 #include "optimizer/appendinfo.h"
 #endif  /* PG_VERSION_NUM */
@@ -91,7 +92,14 @@
 #include <stdlib.h>
 
 #include "db2_fdw.h"
-
+#if PG_VERSION_NUM >= 150000
+#define STRVAL(arg) ((String *)(arg))->sval
+#else
+#define STRVAL(arg) ((Value*)(arg))->val.str
+#endif
+#if PG_VERSION_NUM >= 150000
+#include <datatype/timestamp.h>
+#endif
 /* defined in backend/commands/analyze.c */
 #ifndef WIDTH_THRESHOLD
 #define WIDTH_THRESHOLD 1024
@@ -336,9 +344,9 @@ static struct DB2FdwState *deserializePlanData (List * list);
 static char *deserializeString (Const * constant);
 static long deserializeLong (Const * constant);
 static bool optionIsTrue (const char *value);
-/*
- * static Expr *find_em_expr_for_rel (EquivalenceClass * ec, RelOptInfo * rel);
- */
+#if PG_VERSION_NUM >= 150000
+static Expr *find_em_expr_for_rel (EquivalenceClass * ec, RelOptInfo * rel);
+#endif
 static char *deparseDate (Datum datum);
 static char *deparseTimestamp (Datum datum, bool hasTimezone);
 static char *deparseInterval (Datum datum);
@@ -442,7 +450,7 @@ db2_fdw_validator (PG_FUNCTION_ARGS)
 
     /* check valid values for "readonly" and "key" */
     if (strcmp (def->defname, OPT_READONLY) == 0 || strcmp (def->defname, OPT_KEY) == 0) {
-      char *val = ((Value *) (def->arg))->val.str;
+      char *val = STRVAL(def->arg);
       if (pg_strcasecmp (val, "on") != 0
 	  && pg_strcasecmp (val, "off") != 0
 	  && pg_strcasecmp (val, "yes") != 0 && pg_strcasecmp (val, "no") != 0 && pg_strcasecmp (val, "true") != 0 && pg_strcasecmp (val, "false") != 0)
@@ -453,14 +461,14 @@ db2_fdw_validator (PG_FUNCTION_ARGS)
 
     /* check valid values for "table" and "schema" */
     if (strcmp (def->defname, OPT_TABLE) == 0 || strcmp (def->defname, OPT_SCHEMA) == 0) {
-      char *val = ((Value *) (def->arg))->val.str;
+      char *val = STRVAL(def->arg);
       if (strchr (val, '"') != NULL)
 	ereport (ERROR, (errcode (ERRCODE_FDW_INVALID_ATTRIBUTE_VALUE), errmsg ("invalid value for option \"%s\"", def->defname), errhint ("Double quotes are not allowed in names.")));
     }
 
     /* check valid values for max_long */
     if (strcmp (def->defname, OPT_MAX_LONG) == 0) {
-      char *val = ((Value *) (def->arg))->val.str;
+      char *val = STRVAL(def->arg);
       char *endptr;
       unsigned long max_long = strtoul (val, &endptr, 0);
       if (val[0] == '\0' || *endptr != '\0' || max_long < 1 || max_long > 1073741823ul)
@@ -471,7 +479,7 @@ db2_fdw_validator (PG_FUNCTION_ARGS)
 
     /* check valid values for "sample_percent" */
     if (strcmp (def->defname, OPT_SAMPLE) == 0) {
-      char *val = ((Value *) (def->arg))->val.str;
+      char *val = STRVAL(def->arg);
       char *endptr;
       double sample_percent;
 
@@ -485,7 +493,7 @@ db2_fdw_validator (PG_FUNCTION_ARGS)
 
     /* check valid values for "prefetch" */
     if (strcmp (def->defname, OPT_PREFETCH) == 0) {
-      char *val = ((Value *) (def->arg))->val.str;
+      char *val = STRVAL(def->arg);
       char *endptr;
       unsigned long prefetch = strtol (val, &endptr, 0);
       if (val[0] == '\0' || *endptr != '\0' || prefetch < 0 || prefetch > 10240)
@@ -609,13 +617,13 @@ db2_diag (PG_FUNCTION_ARGS)
     foreach (cell, options) {
       DefElem *def = (DefElem *) lfirst (cell);
       if (strcmp (def->defname, OPT_NLS_LANG) == 0)
-	nls_lang = ((Value *) (def->arg))->val.str;
+	nls_lang = STRVAL(def->arg);
       if (strcmp (def->defname, OPT_DBSERVER) == 0)
-	dbserver = ((Value *) (def->arg))->val.str;
+	dbserver = STRVAL(def->arg);
       if (strcmp (def->defname, OPT_USER) == 0)
-	user = ((Value *) (def->arg))->val.str;
+	user = STRVAL(def->arg);
       if (strcmp (def->defname, OPT_PASSWORD) == 0)
-	password = ((Value *) (def->arg))->val.str;
+	password = STRVAL(def->arg);
     }
 
     /* guess a good NLS_LANG environment setting */
@@ -1307,7 +1315,7 @@ db2AddForeignUpdateTargets (
 
       /* if "key" is set, add a resjunk for this column */
       if (strcmp (def->defname, OPT_KEY) == 0) {
-	if (optionIsTrue (((Value *) (def->arg))->val.str)) {
+	if (optionIsTrue (STRVAL(def->arg))) {
 	  Var *var;
 #if PG_VERSION_NUM < 140000
           TargetEntry *tle;
@@ -1906,7 +1914,7 @@ db2IsForeignRelUpdatable (Relation rel)
   /* loop foreign table options */
   foreach (cell, GetForeignTable (RelationGetRelid (rel))->options) {
     DefElem *def = (DefElem *) lfirst (cell);
-    char *value = ((Value *) (def->arg))->val.str;
+    char *value = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_READONLY) == 0 && optionIsTrue (value))
       return 0;
   }
@@ -1948,13 +1956,13 @@ db2ImportForeignSchema (ImportForeignSchemaStmt * stmt, Oid serverOid)
   foreach (cell, options) {
     DefElem *def = (DefElem *) lfirst (cell);
     if (strcmp (def->defname, OPT_NLS_LANG) == 0)
-      nls_lang = ((Value *) (def->arg))->val.str;
+      nls_lang = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_DBSERVER) == 0)
-      dbserver = ((Value *) (def->arg))->val.str;
+      dbserver = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_USER) == 0)
-      user = ((Value *) (def->arg))->val.str;
+      user = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_PASSWORD) == 0)
-      password = ((Value *) (def->arg))->val.str;
+      password = STRVAL(def->arg);
   }
 
   /* process the options of the IMPORT FOREIGN SCHEMA command */
@@ -1962,7 +1970,7 @@ db2ImportForeignSchema (ImportForeignSchemaStmt * stmt, Oid serverOid)
     DefElem *def = (DefElem *) lfirst (cell);
 
     if (strcmp (def->defname, "case") == 0) {
-      char *s = ((Value *) (def->arg))->val.str;
+      char *s = STRVAL(def->arg);
       if (strcmp (s, "keep") == 0)
 	foldcase = CASE_KEEP;
       else if (strcmp (s, "lower") == 0)
@@ -1976,7 +1984,7 @@ db2ImportForeignSchema (ImportForeignSchemaStmt * stmt, Oid serverOid)
       continue;
     }
     else if (strcmp (def->defname, "readonly") == 0) {
-      char *s = ((Value *) (def->arg))->val.str;
+      char *s = STRVAL(def->arg);
       if (pg_strcasecmp (s, "on") != 0 || pg_strcasecmp (s, "yes") != 0 || pg_strcasecmp (s, "true") != 0)
 	readonly = true;
       else if (pg_strcasecmp (s, "off") != 0 || pg_strcasecmp (s, "no") != 0 || pg_strcasecmp (s, "false") != 0)
@@ -2076,7 +2084,9 @@ db2ImportForeignSchema (ImportForeignSchemaStmt * stmt, Oid serverOid)
 	if (typeprec < 54)
           if (typeprec == 0)
 	    appendStringInfo (&buf, "float(1)");
-          else
+          else if(typeprec < 0)
+	    appendStringInfo (&buf, "float(1)");
+	  else
 	    appendStringInfo (&buf, "float(%d)", typeprec);
 	else
 	  appendStringInfo (&buf, "numeric");
@@ -2141,23 +2151,23 @@ getFdwState (Oid foreigntableid, double *sample_percent)
   foreach (cell, options) {
     DefElem *def = (DefElem *) lfirst (cell);
     if (strcmp (def->defname, OPT_NLS_LANG) == 0)
-      fdwState->nls_lang = ((Value *) (def->arg))->val.str;
+      fdwState->nls_lang = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_DBSERVER) == 0)
-      fdwState->dbserver = ((Value *) (def->arg))->val.str;
+      fdwState->dbserver = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_USER) == 0)
-      fdwState->user = ((Value *) (def->arg))->val.str;
+      fdwState->user = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_PASSWORD) == 0)
-      fdwState->password = ((Value *) (def->arg))->val.str;
+      fdwState->password = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_SCHEMA) == 0)
-      schema = ((Value *) (def->arg))->val.str;
+      schema = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_TABLE) == 0)
-      table = ((Value *) (def->arg))->val.str;
+      table = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_MAX_LONG) == 0)
-      maxlong = ((Value *) (def->arg))->val.str;
+      maxlong = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_SAMPLE) == 0)
-      sample = ((Value *) (def->arg))->val.str;
+      sample = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_PREFETCH) == 0)
-      fetch = ((Value *) (def->arg))->val.str;
+      fetch = STRVAL(def->arg);
   }
 
   /* convert "max_long" option to number or use default */
@@ -2278,7 +2288,7 @@ getColumnData (struct db2Table *db2Table, Oid foreigntableid)
       DefElem *def = (DefElem *) lfirst (option);
 
       /* is it the "key" option and is it set to "true" ? */
-      if (strcmp (def->defname, OPT_KEY) == 0 && optionIsTrue (((Value *) (def->arg))->val.str)) {
+      if (strcmp (def->defname, OPT_KEY) == 0 && optionIsTrue ((STRVAL(def->arg)))) {
 	/* mark the column as primary key column */
 	db2Table->cols[index - 1]->pkey = 1;
       }
@@ -2307,7 +2317,9 @@ createQuery (struct DB2FdwState *fdwState, RelOptInfo * foreignrel, bool modify,
   char *wherecopy, *p, md5[33], parname[10], *separator = "";
   StringInfoData query, result;
   List *columnlist, *conditions = foreignrel->baserestrictinfo;
-
+#if PG_VERSION_NUM >= 150000
+  const char *errstr = NULL;
+#endif
   columnlist = foreignrel->reltarget->exprs;
 #if PG_VERSION_NUM < 90600
   columnlist = foreignrel->reltargetlist;
@@ -2399,10 +2411,16 @@ createQuery (struct DB2FdwState *fdwState, RelOptInfo * foreignrel, bool modify,
    * Calculate MD5 hash of the query string so far.
    * This is needed to find the query in DB2's library cache for EXPLAIN.
    */
-  if (!pg_md5_hash (query.data, strlen (query.data), md5)) {
+
+#if PG_VERSION_NUM >= 150000
+  if (!pg_md5_hash (query.data, strlen (query.data), md5,&errstr)) {
     ereport (ERROR, (errcode (ERRCODE_OUT_OF_MEMORY), errmsg ("out of memory")));
   }
-
+#else
+if (!pg_md5_hash (query.data, strlen (query.data), md5)) {
+     ereport (ERROR, (errcode (ERRCODE_OUT_OF_MEMORY), errmsg ("out of memory")));
+  }
+#endif
   /* add comment with MD5 hash to query */
   initStringInfo (&result);
   appendStringInfo (&result, "SELECT /*%s*/ %s", md5, query.data);
@@ -4687,15 +4705,22 @@ deparseTimestamp (Datum datum, bool hasTimezone)
 char *
 deparseInterval (Datum datum)
 {
+#if PG_VERSION_NUM >= 150000
+  struct pg_itm tm;
+#else
   struct pg_tm tm;
-  fsec_t fsec;
+#endif
+  fsec_t fsec=0;
   StringInfoData s;
   char *sign;
 
-  if (interval2tm (*DatumGetIntervalP (datum), &tm, &fsec) != 0) {
-    elog (ERROR, "could not convert interval to tm");
-  }
-
+#if PG_VERSION_NUM >= 150000
+  interval2itm (*DatumGetIntervalP (datum), &tm);
+#else
+ if (interval2tm (*DatumGetIntervalP (datum), &tm, &fsec) != 0) {
+	     elog (ERROR, "could not convert interval to tm");
+	   }
+#endif
   /* only translate intervals that can be translated to INTERVAL DAY TO SECOND */
   if (tm.tm_year != 0 || tm.tm_mon != 0)
     return NULL;
@@ -4716,8 +4741,11 @@ deparseInterval (Datum datum)
     sign = "";
 
   initStringInfo (&s);
+#if PG_VERSION_NUM >= 150000
+  appendStringInfo (&s, "INTERVAL '%s%d %02ld:%02d:%02d.%06d' DAY(9) TO SECOND(6)", sign, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, fsec);
+#else
   appendStringInfo (&s, "INTERVAL '%s%d %02d:%02d:%02d.%06d' DAY(9) TO SECOND(6)", sign, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, fsec);
-
+#endif
   return s.data;
 }
 
