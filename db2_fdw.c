@@ -5126,6 +5126,7 @@ setSelectParameters (struct paramDesc *paramList, ExprContext * econtext)
 void
 convertTuple (struct DB2FdwState *fdw_state, Datum * values, bool * nulls, bool trunc_lob)
 {
+  char *tmp_value = NULL;
   char *value = NULL;
   long value_len = 0;
   int j, index = -1;
@@ -5178,7 +5179,20 @@ convertTuple (struct DB2FdwState *fdw_state, Datum * values, bool * nulls, bool 
       /* terminating zero byte (needed for LONGs) */
       value[value_len] = '\0';
     }
-    else {
+    else if(fdw_state->db2Table->cols[index]->db2type ==  SQL_TYPE_FLOAT
+	    || fdw_state->db2Table->cols[index]->db2type == SQL_TYPE_DECIMAL
+	    || fdw_state->db2Table->cols[index]->db2type == SQL_TYPE_INTEGER
+	    || fdw_state->db2Table->cols[index]->db2type == SQL_TYPE_DOUBLE) {
+      value = fdw_state->db2Table->cols[index]->val;
+      value_len = fdw_state->db2Table->cols[index]->val_len;
+      tmp_value = value;
+
+      if((tmp_value = strchr(value,','))!=NULL) {
+               *tmp_value = '.';
+      }
+
+
+    } else {
       /* for other data types, db2Table contains the results */
       value = fdw_state->db2Table->cols[index]->val;
       value_len = fdw_state->db2Table->cols[index]->val_len;

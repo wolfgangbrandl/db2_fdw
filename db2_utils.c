@@ -1689,7 +1689,7 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
   int count = 0;
   const char *const schema_query = "select count(*) from SYSIBM.SYSSCHEMATA where name=:nsp";
   const char *const column_query = 
-    "select A.TABLE_NAME,B.NAME,COLTYPE,LENGTH,SCALE,COLNO \n"
+    "select A.TABLE_NAME,B.NAME,COLTYPE,LENGTH,SCALE,B.NULLS,coalesce(B.KEYSEQ,0) as key \n"
     "from sysibm.tables a,sysibm.SYSCOLUMNS b \n" 
     "where table_schema=:nsp \n"
     "and (TABLE_TYPE like 'BASE TABLE%' OR TABLE_TYPE like 'VIEW') \n"
