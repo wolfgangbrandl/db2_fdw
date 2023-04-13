@@ -523,6 +523,28 @@ Note that the extension version as shown by the psql command `\x` or the
 system catalog `pg_available_extensions` is *not* the installed version
 of db2_fdw.  To get the db2_fdw version, use the function `DB2_diag`.
 
+Environment setup
+-----------------
+
+It is mandatory that you correctly setup environment variables to use the
+extension.
+
+DB2 uses a lot of environment variables, usually created by the
+
+    db2profile
+
+script.
+
+If you run PostgreSQL form a shell (via pg_ctl), ensure that the shell
+includes that script.
+
+If you run PostgreSQL as a systemd unit, add the variables to the unit
+definition file (see [#4](https://github.com/wolfgangbrandl/db2_fdw/issues/4#issuecomment-673426882))
+
+If you use Ubuntu, please put the variables in
+
+    /etc/postgresql/XXX/main/environment
+
 Running the regression tests:
 -----------------------------
 
