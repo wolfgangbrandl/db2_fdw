@@ -586,7 +586,7 @@ retry_connect:
 			    (DB2Text *) user,
 			    strlen ((char *) user),
 			    (DB2Text *) password,
-			    strlen ((char *) password), (DB2Text *) connectstring, strlen ((char *) connectstring)), (dvoid *) envhp, OCI_HTYPE_ENV,__LINE__, __FILE__) != OCI_SUCCESS) {
+			    strlen ((char *) password), (DB2Text *) connectstring, strlen ((char *) connectstring)), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection User: %s ,%s", user, db2Message);
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection password: %s ,%s", password, db2Message);
       db2Error_d (FDW_UNABLE_TO_ESTABLISH_CONNECTION, "cannot authenticate"," connection connectstring: %s ,%s", connectstring, db2Message);
