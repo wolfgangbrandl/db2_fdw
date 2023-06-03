@@ -16,6 +16,7 @@ This README contains the following sections:
 7. [Internals](#7-internals)
 8. [Problems](#8-problems)
 9. [Support](#9-support)
+10. [Docker](10-Docker)
 
 db2_fdw was written by Wolfgang Brandl, with notable contributions from
 Laurenz Alba from Austria.
@@ -609,3 +610,11 @@ If that causes an error, please also include the output of
 If you have a problem or question or any kind of feedback, the preferred
 option is to open an issue on [GitHub](https://github.com/wolfgangbrandl/db2_fdw)
 This requires a GitHub account.
+
+10 Docker
+=========
+
+This includes a *Dockerfile* that had been made executable. By running it va **./Dockerfile**, it will compile *db2_fdw.so* and copy it from the docker container into your working directory.
+
+This also includes a devcontainer.json that uses the *Dockerfile* to quickly create a developer environment.
+

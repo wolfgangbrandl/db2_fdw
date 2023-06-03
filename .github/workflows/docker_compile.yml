@@ -1,0 +1,27 @@
+name: docker compile
+
+on:
+    push:
+    pull_request:
+      branches:
+        - master
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+           - name: checkout
+             uses: actions/checkout@v3
+             with:
+              path: action
+           - name: Set up Docker Buildx
+             uses: docker/setup-buildx-action@v2
+           - name: Build and grab shared library
+             run: > 
+              /usr/bin/docker build -t db2_fdw:${GITHUB_SHA:-7} -f ./action/Dockerfile ./action &&
+              /usr/bin/docker run --name db2_fdw_run db2_fdw:${GITHUB_SHA:-7}  &&
+                docker cp db2_fdw_run:/workspace/db2_fdw.so ${{ github.workspace }}/db2_fdw.so
+           - name: Upload shared library artifact
+             uses: actions/upload-artifact@v4
+             with:
+               name: db2_fdw
+               path: ${{ github.workspace }}/db2_fdw.so
