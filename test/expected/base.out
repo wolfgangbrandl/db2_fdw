@@ -1,67 +1,43 @@
-\set echo off
-DROP EXTENSION db2_fdw cascade;
-ERROR:  extension "db2_fdw" does not exist
-DROP USER MAPPING FOR PUBLIC SERVER sample;
-ERROR:  server "sample" does not exist
-DROP FOREIGN TABLE TYPETEST1;
-ERROR:  foreign table "typetest1" does not exist
-DROP FOREIGN TABLE EMPSM;
-ERROR:  foreign table "empsm" does not exist
 \set ECHO all
 CREATE EXTENSION db2_fdw;
 CREATE SERVER sample FOREIGN DATA WRAPPER db2_fdw OPTIONS (dbserver 'SAMPLE');
 CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user 'dbtest', password 'start123');
 -- CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user '', password '');
 IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO public;
-select * from employee;
- empno  | firstnme  | midinit |  lastname  | workdept | phoneno |  hiredate  |   job    | edlevel | sex | birthdate  |  salary   |  bonus  |  comm   
---------+-----------+---------+------------+----------+---------+------------+----------+---------+-----+------------+-----------+---------+---------
- 000010 | CHRISTINE | I       | HAAS       | A00      | 3978    | 01-01-1995 | PRES     |      18 | F   | 08-24-1963 | 152750.00 | 1000.00 | 4220.00
- 000020 | MICHAEL   | L       | THOMPSON   | B01      | 3476    | 10-10-2003 | MANAGER  |      18 | M   | 02-02-1978 |  94250.00 |  800.00 | 3300.00
- 000030 | SALLY     | A       | KWAN       | C01      | 4738    | 04-05-2005 | MANAGER  |      20 | F   | 05-11-1971 |  98250.00 |  800.00 | 3060.00
- 000050 | JOHN      | B       | GEYER      | E01      | 6789    | 08-17-1979 | MANAGER  |      16 | M   | 09-15-1955 |  80175.00 |  800.00 | 3214.00
- 000060 | IRVING    | F       | STERN      | D11      | 6423    | 09-14-2003 | MANAGER  |      16 | M   | 07-07-1975 |  72250.00 |  500.00 | 2580.00
- 000070 | EVA       | D       | PULASKI    | D21      | 7831    | 09-30-2005 | MANAGER  |      16 | F   | 05-26-2003 |  96170.00 |  700.00 | 2893.00
- 000090 | EILEEN    | W       | HENDERSON  | E11      | 5498    | 08-15-2000 | MANAGER  |      16 | F   | 05-15-1971 |  89750.00 |  600.00 | 2380.00
- 000100 | THEODORE  | Q       | SPENSER    | E21      | 0972    | 06-19-2000 | MANAGER  |      14 | M   | 12-18-1980 |  86150.00 |  500.00 | 2092.00
- 000110 | VINCENZO  | G       | LUCCHESSI  | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 |  66500.00 |  900.00 | 3720.00
- 000120 | SEAN      |         | O'CONNELL  | A00      | 2167    | 12-05-1993 | CLERK    |      14 | M   | 10-18-1972 |  49250.00 |  600.00 | 2340.00
- 000130 | DELORES   | M       | QUINTANA   | C01      | 4578    | 07-28-2001 | ANALYST  |      16 | F   | 09-15-1955 |  73800.00 |  500.00 | 1904.00
- 000140 | HEATHER   | A       | NICHOLLS   | C01      | 1793    | 12-15-2006 | ANALYST  |      18 | F   | 01-19-1976 |  68420.00 |  600.00 | 2274.00
- 000150 | BRUCE     |         | ADAMSON    | D11      | 4510    | 02-12-2002 | DESIGNER |      16 | M   | 05-17-1977 |  55280.00 |  500.00 | 2022.00
- 000160 | ELIZABETH | R       | PIANKA     | D11      | 3782    | 10-11-2006 | DESIGNER |      17 | F   | 04-12-1980 |  62250.00 |  400.00 | 1780.00
- 000170 | MASATOSHI | J       | YOSHIMURA  | D11      | 2890    | 09-15-1999 | DESIGNER |      16 | M   | 01-05-1981 |  44680.00 |  500.00 | 1974.00
- 000180 | MARILYN   | S       | SCOUTTEN   | D11      | 1682    | 07-07-2003 | DESIGNER |      17 | F   | 02-21-1979 |  51340.00 |  500.00 | 1707.00
- 000190 | JAMES     | H       | WALKER     | D11      | 2986    | 07-26-2004 | DESIGNER |      16 | M   | 06-25-1982 |  50450.00 |  400.00 | 1636.00
- 000200 | DAVID     |         | BROWN      | D11      | 4501    | 03-03-2002 | DESIGNER |      16 | M   | 05-29-1971 |  57740.00 |  600.00 | 2217.00
- 000210 | WILLIAM   | T       | JONES      | D11      | 0942    | 04-11-1998 | DESIGNER |      17 | M   | 02-23-2003 |  68270.00 |  400.00 | 1462.00
- 000220 | JENNIFER  | K       | LUTZ       | D11      | 0672    | 08-29-1998 | DESIGNER |      18 | F   | 03-19-1978 |  49840.00 |  600.00 | 2387.00
- 000230 | JAMES     | J       | JEFFERSON  | D21      | 2094    | 11-21-1996 | CLERK    |      14 | M   | 05-30-1980 |  42180.00 |  400.00 | 1774.00
- 000240 | SALVATORE | M       | MARINO     | D21      | 3780    | 12-05-2004 | CLERK    |      17 | M   | 03-31-2002 |  48760.00 |  600.00 | 2301.00
- 000250 | DANIEL    | S       | SMITH      | D21      | 0961    | 10-30-1999 | CLERK    |      15 | M   | 11-12-1969 |  49180.00 |  400.00 | 1534.00
- 000260 | SYBIL     | P       | JOHNSON    | D21      | 8953    | 09-11-2005 | CLERK    |      16 | F   | 10-05-1976 |  47250.00 |  300.00 | 1380.00
- 000270 | MARIA     | L       | PEREZ      | D21      | 9001    | 09-30-2006 | CLERK    |      15 | F   | 05-26-2003 |  37380.00 |  500.00 | 2190.00
- 000280 | ETHEL     | R       | SCHNEIDER  | E11      | 8997    | 03-24-1997 | OPERATOR |      17 | F   | 03-28-1976 |  36250.00 |  500.00 | 2100.00
- 000290 | JOHN      | R       | PARKER     | E11      | 4502    | 05-30-2006 | OPERATOR |      12 | M   | 07-09-1985 |  35340.00 |  300.00 | 1227.00
- 000300 | PHILIP    | X       | SMITH      | E11      | 2095    | 06-19-2002 | OPERATOR |      14 | M   | 10-27-1976 |  37750.00 |  400.00 | 1420.00
- 000310 | MAUDE     | F       | SETRIGHT   | E11      | 3332    | 09-12-1994 | OPERATOR |      12 | F   | 04-21-1961 |  35900.00 |  300.00 | 1272.00
- 000320 | RAMLAL    | V       | MEHTA      | E21      | 9990    | 07-07-1995 | FIELDREP |      16 | M   | 08-11-1962 |  39950.00 |  400.00 | 1596.00
- 000330 | WING      |         | LEE        | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 |  45370.00 |  500.00 | 2030.00
- 000340 | JASON     | R       | GOUNOT     | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 |  43840.00 |  500.00 | 1907.00
- 200010 | DIAN      | J       | HEMMINGER  | A00      | 3978    | 01-01-1995 | SALESREP |      18 | F   | 08-14-1973 |  46500.00 | 1000.00 | 4220.00
- 200120 | GREG      |         | ORLANDO    | A00      | 2167    | 05-05-2002 | CLERK    |      14 | M   | 10-18-1972 |  39250.00 |  600.00 | 2340.00
- 200140 | KIM       | N       | NATZ       | C01      | 1793    | 12-15-2006 | ANALYST  |      18 | F   | 01-19-1976 |  68420.00 |  600.00 | 2274.00
- 200170 | KIYOSHI   |         | YAMAMOTO   | D11      | 2890    | 09-15-2005 | DESIGNER |      16 | M   | 01-05-1981 |  64680.00 |  500.00 | 1974.00
- 200220 | REBA      | K       | JOHN       | D11      | 0672    | 08-29-2005 | DESIGNER |      18 | F   | 03-19-1978 |  69840.00 |  600.00 | 2387.00
- 200240 | ROBERT    | M       | MONTEVERDE | D21      | 3780    | 12-05-2004 | CLERK    |      17 | M   | 03-31-1984 |  37760.00 |  600.00 | 2301.00
- 200280 | EILEEN    | R       | SCHWARTZ   | E11      | 8997    | 03-24-1997 | OPERATOR |      17 | F   | 03-28-1966 |  46250.00 |  500.00 | 2100.00
- 200310 | MICHELLE  | F       | SPRINGER   | E11      | 3332    | 09-12-1994 | OPERATOR |      12 | F   | 04-21-1961 |  35900.00 |  300.00 | 1272.00
- 200330 | HELENA    |         | WONG       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | F   | 07-18-1971 |  35370.00 |  500.00 | 2030.00
- 200340 | ROY       | R       | ALONZO     | E21      | 5698    | 07-05-1997 | FIELDREP |      16 | M   | 05-17-1956 |  31840.00 |  500.00 | 1907.00
-(42 rows)
+\c contrib_regression
+drop foreign table org;
+CREATE FOREIGN TABLE org (
+                  DEPTNUMB SMALLINT OPTIONS (key 'yes') NOT NULL ,
+                  DEPTNAME VARCHAR(14) ,
+                  MANAGER SMALLINT ,
+                  DIVISION VARCHAR(10) ,
+                  LOCATION VARCHAR(13)
+                   )
+      SERVER sample OPTIONS (schema 'DB2INST1',table 'ORG');
+delete from org;
+insert into org (DEPTNUMB,DEPTNAME,MANAGER,DIVISION,LOCATION) values(10,'Head Office',160,'Corporate','New York');
+insert into org (DEPTNUMB,DEPTNAME,MANAGER,DIVISION,LOCATION) values(15,'New England',50,'Eastern','Boston');
+insert into org (DEPTNUMB,DEPTNAME,MANAGER,DIVISION,LOCATION) values(20,'Mid Atlantic',10,'Eastern','Washington');
+insert into org (DEPTNUMB,DEPTNAME,MANAGER,DIVISION,LOCATION) values(38,'South Atlantic',30,'Eastern','Atlanta');
+insert into org (DEPTNUMB,DEPTNAME,MANAGER,DIVISION,LOCATION) values(42,'Great Lakes',100,'Midwest','Chicago');
+insert into org (DEPTNUMB,DEPTNAME,MANAGER,DIVISION,LOCATION) values(51,'Plains',140,'Midwest','Dallas');
+insert into org (DEPTNUMB,DEPTNAME,MANAGER,DIVISION,LOCATION) values(66,'Pacific',270,'Western','San Francisco');
+insert into org (DEPTNUMB,DEPTNAME,MANAGER,DIVISION,LOCATION) values(84,'Mountain',290,'Western','Denver');
+select * from org;
+ deptnumb |    deptname    | manager | division  |   location
+----------+----------------+---------+-----------+---------------
+       10 | Head Office    |     160 | Corporate | New York
+       15 | New England    |      50 | Eastern   | Boston
+       20 | Mid Atlantic   |      10 | Eastern   | Washington
+       38 | South Atlantic |      30 | Eastern   | Atlanta
+       42 | Great Lakes    |     100 | Midwest   | Chicago
+       51 | Plains         |     140 | Midwest   | Dallas
+       66 | Pacific        |     270 | Western   | San Francisco
+       84 | Mountain       |     290 | Western   | Denver
+(8 rows)
 
 select * from sales;
- sales_date | sales_person |    region     | sales 
+ sales_date | sales_person |    region     | sales
 ------------+--------------+---------------+-------
  12-31-2005 | LUCCHESSI    | Ontario-South |     1
  12-31-2005 | LEE          | Ontario-South |     3
@@ -97,7 +73,7 @@ select * from sales;
  04-01-2006 | LUCCHESSI    | Ontario-South |     3
  04-01-2006 | LUCCHESSI    | Manitoba      |     1
  04-01-2006 | LEE          | Ontario-South |     8
- 04-01-2006 | LEE          | Ontario-North |      
+ 04-01-2006 | LEE          | Ontario-North |
  04-01-2006 | LEE          | Quebec        |     8
  04-01-2006 | LEE          | Manitoba      |     9
  04-01-2006 | GOUNOT       | Ontario-South |     3
@@ -107,9 +83,8 @@ select * from sales;
 (41 rows)
 
 select * from employee a, sales b where a.lastname = b.sales_person;
- empno  | firstnme | midinit | lastname  | workdept | phoneno |  hiredate  |   job    | edlevel | sex | birthdate  |  salary  | bonus  |  comm   | sales_date | sales_person |    region     | sales 
+ empno  | firstnme | midinit | lastname  | workdept | phoneno |  hiredate  |   job    | edlevel | sex | birthdate  |  salary  | bonus  |  comm   | sales_date | sales_person |    region     | sales
 --------+----------+---------+-----------+----------+---------+------------+----------+---------+-----+------------+----------+--------+---------+------------+--------------+---------------+-------
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 12-31-2005 | LUCCHESSI    | Ontario-South |     1
  000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 04-01-2006 | LUCCHESSI    | Manitoba      |     1
  000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 04-01-2006 | LUCCHESSI    | Ontario-South |     3
  000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 03-31-2006 | LUCCHESSI    | Manitoba      |     1
@@ -118,10 +93,10 @@ select * from employee a, sales b where a.lastname = b.sales_person;
  000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 03-30-2006 | LUCCHESSI    | Ontario-South |     1
  000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 03-29-2006 | LUCCHESSI    | Quebec        |     1
  000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 03-29-2006 | LUCCHESSI    | Ontario-South |     3
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 12-31-2005 | LEE          | Ontario-South |     3
+ 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 12-31-2005 | LUCCHESSI    | Ontario-South |     1
  000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 04-01-2006 | LEE          | Manitoba      |     9
  000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 04-01-2006 | LEE          | Quebec        |     8
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 04-01-2006 | LEE          | Ontario-North |      
+ 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 04-01-2006 | LEE          | Ontario-North |
  000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 04-01-2006 | LEE          | Ontario-South |     8
  000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-31-2006 | LEE          | Manitoba      |     3
  000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-31-2006 | LEE          | Quebec        |     7
@@ -137,65 +112,21 @@ select * from employee a, sales b where a.lastname = b.sales_person;
  000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-29-2006 | LEE          | Ontario-South |     2
  000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 12-31-2005 | LEE          | Manitoba      |     2
  000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 12-31-2005 | LEE          | Quebec        |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 12-31-2005 | GOUNOT       | Quebec        |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 04-01-2006 | GOUNOT       | Manitoba      |     7
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 04-01-2006 | GOUNOT       | Quebec        |     3
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 04-01-2006 | GOUNOT       | Ontario-North |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 04-01-2006 | GOUNOT       | Ontario-South |     3
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-31-2006 | GOUNOT       | Quebec        |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-31-2006 | GOUNOT       | Ontario-South |     2
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-31-2006 | GOUNOT       | Manitoba      |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-30-2006 | GOUNOT       | Quebec        |    18
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-30-2006 | GOUNOT       | Ontario-South |     2
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-29-2006 | GOUNOT       | Manitoba      |     7
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-29-2006 | GOUNOT       | Quebec        |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-29-2006 | GOUNOT       | Ontario-South |     3
-(41 rows)
-
-create table l_employee as select * from employee;
-select * from l_employee a, sales b where a.lastname = b.sales_person;
- empno  | firstnme | midinit | lastname  | workdept | phoneno |  hiredate  |   job    | edlevel | sex | birthdate  |  salary  | bonus  |  comm   | sales_date | sales_person |    region     | sales 
---------+----------+---------+-----------+----------+---------+------------+----------+---------+-----+------------+----------+--------+---------+------------+--------------+---------------+-------
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 12-31-2005 | LUCCHESSI    | Ontario-South |     1
  000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 12-31-2005 | LEE          | Ontario-South |     3
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 12-31-2005 | LEE          | Quebec        |     1
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 12-31-2005 | LEE          | Manitoba      |     2
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 12-31-2005 | GOUNOT       | Quebec        |     1
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 03-29-2006 | LUCCHESSI    | Ontario-South |     3
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 03-29-2006 | LUCCHESSI    | Quebec        |     1
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-29-2006 | LEE          | Ontario-South |     2
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-29-1996 | LEE          | Ontario-North |     2
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-29-2006 | LEE          | Quebec        |     3
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-29-2006 | LEE          | Manitoba      |     5
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-29-2006 | GOUNOT       | Ontario-South |     3
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-29-2006 | GOUNOT       | Quebec        |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-29-2006 | GOUNOT       | Manitoba      |     7
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 03-30-2006 | LUCCHESSI    | Ontario-South |     1
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 03-30-2006 | LUCCHESSI    | Quebec        |     2
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 03-30-2006 | LUCCHESSI    | Manitoba      |     1
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-30-2006 | LEE          | Ontario-South |     7
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-30-2006 | LEE          | Ontario-North |     3
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-30-2006 | LEE          | Quebec        |     7
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-30-2006 | LEE          | Manitoba      |     4
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-30-2006 | GOUNOT       | Ontario-South |     2
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-30-2006 | GOUNOT       | Quebec        |    18
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-31-2006 | GOUNOT       | Manitoba      |     1
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 03-31-2006 | LUCCHESSI    | Manitoba      |     1
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-31-2006 | LEE          | Ontario-South |    14
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-31-2006 | LEE          | Ontario-North |     3
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-31-2006 | LEE          | Quebec        |     7
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 03-31-2006 | LEE          | Manitoba      |     3
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-31-2006 | GOUNOT       | Ontario-South |     2
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-31-2006 | GOUNOT       | Quebec        |     1
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 04-01-2006 | LUCCHESSI    | Ontario-South |     3
- 000110 | VINCENZO | G       | LUCCHESSI | A00      | 3490    | 05-16-1988 | SALESREP |      19 | M   | 11-05-1959 | 66500.00 | 900.00 | 3720.00 | 04-01-2006 | LUCCHESSI    | Manitoba      |     1
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 04-01-2006 | LEE          | Ontario-South |     8
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 04-01-2006 | LEE          | Ontario-North |      
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 04-01-2006 | LEE          | Quebec        |     8
- 000330 | WING     |         | LEE       | E21      | 2103    | 02-23-2006 | FIELDREP |      14 | M   | 07-18-1971 | 45370.00 | 500.00 | 2030.00 | 04-01-2006 | LEE          | Manitoba      |     9
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 04-01-2006 | GOUNOT       | Ontario-South |     3
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 04-01-2006 | GOUNOT       | Ontario-North |     1
- 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 04-01-2006 | GOUNOT       | Quebec        |     3
  000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 04-01-2006 | GOUNOT       | Manitoba      |     7
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 04-01-2006 | GOUNOT       | Quebec        |     3
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 04-01-2006 | GOUNOT       | Ontario-North |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 04-01-2006 | GOUNOT       | Ontario-South |     3
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-31-2006 | GOUNOT       | Quebec        |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-31-2006 | GOUNOT       | Ontario-South |     2
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-31-2006 | GOUNOT       | Manitoba      |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-30-2006 | GOUNOT       | Quebec        |    18
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-30-2006 | GOUNOT       | Ontario-South |     2
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-29-2006 | GOUNOT       | Manitoba      |     7
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-29-2006 | GOUNOT       | Quebec        |     1
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 03-29-2006 | GOUNOT       | Ontario-South |     3
+ 000340 | JASON    | R       | GOUNOT    | E21      | 5698    | 05-05-1977 | FIELDREP |      16 | M   | 05-17-1956 | 43840.00 | 500.00 | 1907.00 | 12-31-2005 | GOUNOT       | Quebec        |     1
 (41 rows)
 
+create table orgcopy as select * from org;
+drop table orgcopy;
