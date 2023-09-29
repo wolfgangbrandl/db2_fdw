@@ -25,7 +25,7 @@ include $(PGXS)
 checkin: clean
 	git remote set-url origin git@github.com:wolfgangbrandl/db2_fdw.git
 	git add --all
-	git commit -m "Postgres 1601 correct compile errors"
+	git commit -m "Postgres 16.0 correct compile errors"
 #	git commit -m "`date`"
 	git push -u origin master
 
