@@ -1388,30 +1388,55 @@ db2PlanForeignModify (PlannerInfo * root, ModifyTable * plan, Index resultRelati
   struct paramDesc *param;
   char paramName[10];
   TupleDesc tupdesc;
-  Bitmapset *tmpset;
+  Bitmapset *updated_cols;
   AttrNumber col;
+  int col_idx = -1;
 
-  /* we don't support INSERT ... ON CONFLICT */
+/*
+* Get the updated columns and the user for permission checks.
+* We put that here at the beginning, since the way to do that changed
+* considerably over the different PostgreSQL versions.
+*/
+#if PG_VERSION_NUM >= 160000
+  RTEPermissionInfo *perminfo = getRTEPermissionInfo(root->parse->rteperminfos, rte);
+  updated_cols = bms_copy(perminfo->updatedCols);
+#else
+#if PG_VERSION_NUM >= 90500
+  updated_cols = bms_copy(rte->updatedCols);
+#else
+  updated_cols = bms_copy(rte->modifiedCols);
+#endif  /* PG_VERSION_NUM >= 90500 */
+#endif  /* PG_VERSION_NUM >= 160000 */
+
+#if PG_VERSION_NUM >= 90500
+/* we don't support INSERT ... ON CONFLICT */
   if (plan->onConflictAction != ONCONFLICT_NONE)
-    ereport (ERROR, (errcode (ERRCODE_FDW_UNABLE_TO_CREATE_EXECUTION), errmsg ("INSERT with ON CONFLICT clause is not supported")));
+    ereport(ERROR, (errcode(ERRCODE_FDW_UNABLE_TO_CREATE_EXECUTION), errmsg("INSERT with ON CONFLICT clause is not supported")));
+#endif  /* PG_VERSION_NUM */
 
-  /* check if the foreign table is scanned */
-  if (resultRelation < root->simple_rel_array_size && root->simple_rel_array[resultRelation] != NULL) {
-    /* if yes, copy the foreign table information from the associated RelOptInfo */
-    fdwState = copyPlanData ((struct DB2FdwState *) (root->simple_rel_array[resultRelation]->fdw_private));
+/* check if the foreign table is scanned and we already planned that scan */
+  if (resultRelation < root->simple_rel_array_size
+      && root->simple_rel_array[resultRelation] != NULL
+      && root->simple_rel_array[resultRelation]->fdw_private != NULL) {
+/* if yes, copy the foreign table information from the associated RelOptInfo */
+    fdwState = copyPlanData((struct DB2FdwState *)(root->simple_rel_array[resultRelation]->fdw_private));
+  } else {
+/*
+* If no, we have to construct the foreign table data ourselves.
+* To match what ExecCheckRTEPerms does, pass the user whose user mapping
+* should be used (if invalid, the current user is used).
+*/
+    fdwState = getFdwState(rte->relid, NULL);
   }
-  else {
-    /* if no, we have to construct it ourselves */
-    fdwState = getFdwState (rte->relid, NULL);
-  }
+  initStringInfo(&sql);
 
-  initStringInfo (&sql);
+/*
+* Core code already has some lock on each rel being planned, so we can
+* use NoLock here.
+*/
+    rel = table_open(rte->relid, NoLock);
 
-  /*
-   * Core code already has some lock on each rel being planned, so we can
-   * use NoLock here.
-   */
-  rel = table_open (rte->relid, NoLock); 
+/* figure out which attributes are affected and if there is a trigger */
 
   /* figure out which attributes are affected and if there is a trigger */
   switch (operation) {
@@ -1438,10 +1463,8 @@ db2PlanForeignModify (PlannerInfo * root, ModifyTable * plan, Index resultRelati
 
     break;
   case CMD_UPDATE:
-    tmpset = bms_copy (rte->updatedCols);
-
-    while ((col = bms_first_member (tmpset)) >= 0) {
-      col += FirstLowInvalidHeapAttributeNumber;
+    while ((col_idx = bms_next_member (updated_cols,col_idx)) >= 0) {
+      col = col_idx + FirstLowInvalidHeapAttributeNumber;
       if (col <= InvalidAttrNumber)	/* shouldn't happen */
 	elog (ERROR, "system-column update is not supported");
       targetAttrs = lappend_int (targetAttrs, col);
