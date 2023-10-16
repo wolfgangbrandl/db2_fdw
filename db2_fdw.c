@@ -2104,6 +2104,7 @@ db2ImportForeignSchema (ImportForeignSchemaStmt * stmt, Oid serverOid)
       case SQL_TYPE_FLOAT:
       case SQL_TYPE_DECIMAL:
       case SQL_TYPE_DOUBLE:
+      case SQL_TYPE_REAL:
 	if (typeprec < 54)
           if (typeprec == 0)
 	    appendStringInfo (&buf, "float(1)");
@@ -4181,7 +4182,7 @@ checkDataType (db2Type db2type, int scale, Oid pgtype, const char *tablename, co
     return;
 
   /* all numeric DB2 types can be transformed to floating point types */
-  if ((db2type == SQL_TYPE_INTEGER || db2type == SQL_TYPE_SMALL || db2type == SQL_TYPE_BIG || db2type == SQL_TYPE_FLOAT || db2type == SQL_TYPE_DOUBLE || db2type == SQL_TYPE_DECIMAL)
+  if ((db2type == SQL_TYPE_INTEGER || db2type == SQL_TYPE_SMALL || db2type == SQL_TYPE_BIG || db2type == SQL_TYPE_FLOAT || db2type == SQL_TYPE_DOUBLE || db2type == SQL_TYPE_REAL || db2type == SQL_TYPE_DECIMAL)
       && (pgtype == NUMERICOID || pgtype == FLOAT4OID || pgtype == FLOAT8OID))
     return;
 
@@ -5205,6 +5206,7 @@ convertTuple (struct DB2FdwState *fdw_state, Datum * values, bool * nulls, bool 
     else if(fdw_state->db2Table->cols[index]->db2type ==  SQL_TYPE_FLOAT
 	    || fdw_state->db2Table->cols[index]->db2type == SQL_TYPE_DECIMAL
 	    || fdw_state->db2Table->cols[index]->db2type == SQL_TYPE_INTEGER
+	    || fdw_state->db2Table->cols[index]->db2type == SQL_TYPE_REAL
 	    || fdw_state->db2Table->cols[index]->db2type == SQL_TYPE_DOUBLE) {
       value = fdw_state->db2Table->cols[index]->val;
       value_len = fdw_state->db2Table->cols[index]->val_len;

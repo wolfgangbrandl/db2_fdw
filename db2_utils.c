@@ -1873,6 +1873,8 @@ db2GetImportColumn (db2Session * session, char *schema, char **tabname, char **c
       *type = SQL_TYPE_VARGRAPHIC;
     else if (strcmp (typename, "DOUBLE  ") == 0)
       *type = SQL_TYPE_DOUBLE;
+    else if (strcmp (typename, "REAL    ") == 0)
+      *type = SQL_TYPE_REAL;
     else if (strcmp (typename, "FLOAT   ") == 0)
       *type = SQL_TYPE_FLOAT;
     else if (strcmp (typename, "BOOLEAN ") == 0)
