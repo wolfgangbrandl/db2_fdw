@@ -1,7 +1,7 @@
 \set ECHO all
 CREATE EXTENSION db2_fdw;
 CREATE SERVER sample FOREIGN DATA WRAPPER db2_fdw OPTIONS (dbserver 'SAMPLE');
-CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user 'dbtest', password 'start123');
+CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user 'db2inst1', password 'first');
 -- CREATE USER MAPPING FOR PUBLIC SERVER sample OPTIONS (user '', password '');
 IMPORT FOREIGN SCHEMA "DB2INST1" FROM SERVER sample INTO public;
 \c contrib_regression
