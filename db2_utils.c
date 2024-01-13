@@ -869,7 +869,7 @@ db2IsStatementOpen (db2Session * session)
  * 		Returns a palloc'ed data structure with the results.
  */
 struct db2Table *
-db2Describe (db2Session * session, char *schema, char *table, char *pgname, long max_long)
+db2Describe (db2Session * session, char *schema, char *table, char *pgname, long max_long, char *noencerr)
 {
   struct db2Table *reply;
   ub2 Type;
@@ -959,6 +959,15 @@ db2Describe (db2Session * session, char *schema, char *table, char *pgname, long
     reply->cols[i - 1]->val = NULL;
     reply->cols[i - 1]->val_len = 0;
     reply->cols[i - 1]->val_null = 1;
+    reply->cols[i - 1]->noencerr = NO_ENC_ERR_NULL;
+
+    if (noencerr != NULL) {
+      if (optionIsTrue(noencerr)) {
+	reply->cols[i - 1]->noencerr = NO_ENC_ERR_TRUE;
+     } else {
+	reply->cols[i - 1]->noencerr = NO_ENC_ERR_FALSE;
+     }
+    }
 
     /* get the parameter descriptor for the column */
     if (checkerr (OCIParamGet ((void *) stmthp, OCI_HTYPE_STMT, session->envp->errhp, (dvoid **) & colp, i), (dvoid *) session->envp->errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
