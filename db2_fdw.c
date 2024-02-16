@@ -5353,9 +5353,7 @@ void
 db2RegisterCallback (void *arg)
 {
   RegisterXactCallback (transactionCallback, arg);
-#ifdef WRITE_API
   RegisterSubXactCallback (subtransactionCallback, arg);
-#endif /* WRITE_API */
 }
 
 /*
@@ -5366,9 +5364,7 @@ void
 db2UnregisterCallback (void *arg)
 {
   UnregisterXactCallback (transactionCallback, arg);
-#ifdef WRITE_API
   UnregisterSubXactCallback (subtransactionCallback, arg);
-#endif /* WRITE_API */
 }
 
 /*

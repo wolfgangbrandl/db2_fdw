@@ -500,26 +500,31 @@ db2Session * db2GetSession (const char *connectstring, char *user, char *passwor
   if (srvp != NULL) {
     db2Debug2("db2GetSession found connect string");
     srvhp = srvp->srvhp;
-    /* Test if we are still connected.  If not, clean up the mess.  */
-    if (checkerr (OCIAttrGet ((dvoid *) srvhp, (ub4) OCI_HTYPE_SERVER,
-			      (dvoid *) & is_connected, (ub4 *) 0, (ub4) OCI_ATTR_SERVER_STATUS, errhp), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
-      db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error connecting to DB2: OCIAttrGet failed to get connection status", db2Message);
-    }
 
-    if (is_connected == OCI_SERVER_NOT_CONNECTED) {
-      db2Debug2("db2GetSession OCI Server not connected");
-      /* clean up */
-      silent = 1;
-      while (srvp->connlist != NULL) {
-        db2Debug2("db2GetSession OCI Server not connected close Session");
-	closeSession (envhp, srvhp, srvp->connlist->userhp, 0);
-      }
-      db2Debug2("db2GetSession OCI Server not connected disconnet");
-      disconnectServer (envhp, srvhp);
-      silent = 0;
 
-      srvp = NULL;
-    }
+
+//    /* Test if we are still connected.  If not, clean up the mess.  */
+//    /*
+//    if (checkerr (OCIAttrGet ((dvoid *) srvhp, (ub4) OCI_HTYPE_SERVER,
+//                  (dvoid *) & is_connected, (ub4 *) 0, (ub4) OCI_ATTR_SERVER_STATUS, errhp), (dvoid *) errhp, OCI_HTYPE_ERROR,__LINE__, __FILE__) != OCI_SUCCESS) {
+//      db2Error_d (FDW_UNABLE_TO_CREATE_REPLY, "error connecting to DB2: OCIAttrGet failed to get connection status", db2Message);
+//    }
+//
+//    if (is_connected == OCI_SERVER_NOT_CONNECTED) {
+//      db2Debug2("db2GetSession OCI Server not connected");
+//      silent = 1;
+//      while (srvp->connlist != NULL) {
+//        db2Debug2("db2GetSession OCI Server not connected close Session");
+//	closeSession (envhp, srvhp, srvp->connlist->userhp, 0);
+//      }
+//      db2Debug2("db2GetSession OCI Server not connected disconnet");
+//      disconnectServer (envhp, srvhp);
+//      silent = 0;
+//
+//      srvp = NULL;
+//    }
+
+
   } 
 retry_connect:
   if (srvp == NULL) { /* srvp == NULL */

@@ -25,7 +25,7 @@ include $(PGXS)
 checkin: clean
 	git remote set-url origin git@github.com:wolfgangbrandl/db2_fdw.git
 	git add --all
-	git commit -m "data type real"
+	git commit -m "transaction save"
 #	git commit -m "`date`"
 	git push -u origin master
 
