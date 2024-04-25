@@ -12,6 +12,7 @@
 /* this one is safe to include and gives us Oid */
 #include "postgres_ext.h"
 
+#include <stdbool.h>
 #include <sys/types.h>
 
 /* db2_fdw version */
@@ -96,6 +97,12 @@ typedef enum
 #define UUIDOID 2950
 #endif
 
+typedef enum {
+  NO_ENC_ERR_NULL,
+  NO_ENC_ERR_TRUE,
+  NO_ENC_ERR_FALSE
+} db2NoEncErrType;
+
 struct db2Column
 {
   char *name;			/* name in DB2 */
@@ -113,6 +120,7 @@ struct db2Column
   unsigned int val_len4;	/* actual length of val - for bind callbacks */
   short val_null;		/* indicator for NULL value */
   int varno;			/* range table index of this column's relation */
+  db2NoEncErrType noencerr;	/* no encoding error produced */
 };
 
 struct db2Table
@@ -170,7 +178,7 @@ extern void db2Cancel (void);
 extern void db2EndTransaction (void *arg, int is_commit, int silent);
 extern void db2EndSubtransaction (void *arg, int nest_level, int is_commit);
 extern int db2IsStatementOpen (db2Session * session);
-extern struct db2Table *db2Describe (db2Session * session, char *schema, char *table, char *pgname, long max_long);
+extern struct db2Table *db2Describe (db2Session * session, char *schema, char *table, char *pgname, long max_long, char *noencerr);
 extern void db2ExplainOLD (db2Session * session, const char *query, int *nrows, char ***plan);
 extern void db2PrepareQuery (db2Session * session, const char *query, const struct db2Table *db2Table, unsigned int prefetch);
 extern int db2ExecuteQuery (db2Session * session, const struct db2Table *db2Table, struct paramDesc *paramList);
@@ -197,3 +205,4 @@ extern void db2Debug2 (const char *message,...);
 extern void db2Debug3 (const char *message,...);
 extern void db2Debug4 (const char *message,...);
 extern void db2Debug5 (const char *message,...);
+extern bool optionIsTrue (const char *value);

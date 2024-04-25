@@ -180,6 +180,7 @@ struct DB2FdwOption
 #define OPT_KEY "key"
 #define OPT_SAMPLE "sample_percent"
 #define OPT_PREFETCH "prefetch"
+#define OPT_NO_ENCODING_ERROR "no_encoding_error"
 
 #define DEFAULT_MAX_LONG 32767
 #define DEFAULT_PREFETCH 200
@@ -205,6 +206,9 @@ static struct DB2FdwOption valid_options[] = {
   {OPT_SAMPLE, ForeignTableRelationId, false},
   {OPT_PREFETCH, ForeignTableRelationId, false}
   , {OPT_KEY, AttributeRelationId, false}
+  , {OPT_NO_ENCODING_ERROR, ForeignDataWrapperRelationId, false}
+  , {OPT_NO_ENCODING_ERROR, ForeignTableRelationId, false}
+  , {OPT_NO_ENCODING_ERROR, AttributeRelationId, false}
 };
 
 #define option_count (sizeof(valid_options)/sizeof(struct DB2FdwOption))
@@ -343,7 +347,6 @@ static Const *serializeLong (long i);
 static struct DB2FdwState *deserializePlanData (List * list);
 static char *deserializeString (Const * constant);
 static long deserializeLong (Const * constant);
-static bool optionIsTrue (const char *value);
 #if PG_VERSION_NUM >= 150000
 static Expr *find_em_expr_for_rel (EquivalenceClass * ec, RelOptInfo * rel);
 #endif
@@ -448,8 +451,8 @@ db2_fdw_validator (PG_FUNCTION_ARGS)
       ereport (ERROR, (errcode (ERRCODE_FDW_INVALID_OPTION_NAME), errmsg ("invalid option \"%s\"", def->defname), errhint ("Valid options in this context are: %s", buf.data)));
     }
 
-    /* check valid values for "readonly" and "key" */
-    if (strcmp (def->defname, OPT_READONLY) == 0 || strcmp (def->defname, OPT_KEY) == 0) {
+    /* check valid values for "readonly", "key" and "no_encoding_error" */
+    if (strcmp (def->defname, OPT_READONLY) == 0 || strcmp (def->defname, OPT_KEY) == 0 || strcmp (def->defname, OPT_NO_ENCODING_ERROR) == 0) {
       char *val = STRVAL(def->arg);
       if (pg_strcasecmp (val, "on") != 0
 	  && pg_strcasecmp (val, "off") != 0
@@ -2164,7 +2167,7 @@ getFdwState (Oid foreigntableid, double *sample_percent)
   char *pgtablename = get_rel_name (foreigntableid);
   List *options;
   ListCell *cell;
-  char *schema = NULL, *table = NULL, *maxlong = NULL, *sample = NULL, *fetch = NULL;
+  char *schema = NULL, *table = NULL, *maxlong = NULL, *sample = NULL, *fetch = NULL, *noencerr = NULL;
   long max_long;
 
   /*
@@ -2192,6 +2195,8 @@ getFdwState (Oid foreigntableid, double *sample_percent)
       sample = STRVAL(def->arg);
     if (strcmp (def->defname, OPT_PREFETCH) == 0)
       fetch = STRVAL(def->arg);
+    if (strcmp (def->defname, OPT_NO_ENCODING_ERROR) == 0)
+      noencerr = STRVAL(def->arg);
   }
 
   /* convert "max_long" option to number or use default */
@@ -2227,7 +2232,7 @@ getFdwState (Oid foreigntableid, double *sample_percent)
     );
 
   /* get remote table description */
-  fdwState->db2Table = db2Describe (fdwState->session, schema, table, pgtablename, max_long);
+  fdwState->db2Table = db2Describe (fdwState->session, schema, table, pgtablename, max_long, noencerr);
 
   /* add PostgreSQL data to table description */
   getColumnData (fdwState->db2Table, foreigntableid);
@@ -2315,6 +2320,11 @@ getColumnData (struct db2Table *db2Table, Oid foreigntableid)
       if (strcmp (def->defname, OPT_KEY) == 0 && optionIsTrue ((STRVAL(def->arg)))) {
 	/* mark the column as primary key column */
 	db2Table->cols[index - 1]->pkey = 1;
+      }
+
+      /* is it the "no_encoding_error" option set ? */
+      if (strcmp (def->defname, OPT_NO_ENCODING_ERROR) == 0) {
+	db2Table->cols[index - 1]->noencerr = optionIsTrue ((STRVAL(def->arg))) ? NO_ENC_ERR_TRUE : NO_ENC_ERR_FALSE;
       }
     }
   }
@@ -4414,6 +4424,7 @@ List * serializePlanData (struct DB2FdwState * fdwState)
     result = lappend (result, serializeInt (fdwState->db2Table->cols[i]->used));
     result = lappend (result, serializeInt (fdwState->db2Table->cols[i]->pkey));
     result = lappend (result, serializeLong (fdwState->db2Table->cols[i]->val_size));
+    result = lappend (result, serializeInt (fdwState->db2Table->cols[i]->noencerr));
     /* don't serialize val, val_len, val_len4, val_null and varno */
   }
 
@@ -4550,6 +4561,8 @@ deserializePlanData (List * list)
     state->db2Table->cols[i]->pkey = (int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
     cell = list_next (list,cell);
     state->db2Table->cols[i]->val_size = deserializeLong (lfirst (cell));
+    cell = list_next (list,cell);
+    state->db2Table->cols[i]->noencerr = (int) DatumGetInt32 (((Const *) lfirst (cell))->constvalue);
     cell = list_next (list,cell);
     /* allocate memory for the result value */
     state->db2Table->cols[i]->val = (char *) palloc (state->db2Table->cols[i]->val_size + 1);
@@ -4817,6 +4830,7 @@ copyPlanData (struct DB2FdwState *orig)
     copy->db2Table->cols[i]->val_len = 0;
     copy->db2Table->cols[i]->val_len4 = 0;
     copy->db2Table->cols[i]->val_null = 0;
+    copy->db2Table->cols[i]->noencerr = orig->db2Table->cols[i]->noencerr;
   }
   copy->startup_cost = 0.0;
   copy->total_cost = 0.0;
@@ -5254,7 +5268,7 @@ convertTuple (struct DB2FdwState *fdw_state, Datum * values, bool * nulls, bool 
 
       /* for string types, check that the data are in the database encoding */
       if (pgtype == BPCHAROID || pgtype == VARCHAROID || pgtype == TEXTOID)
-	(void) pg_verify_mbstr (GetDatabaseEncoding (), value, value_len, false);
+	(void) pg_verify_mbstr (GetDatabaseEncoding (), value, value_len, fdw_state->db2Table->cols[index]->noencerr == NO_ENC_ERR_TRUE);
 
       /* call the type input function */
       switch (pgtype) {
