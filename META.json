@@ -2,7 +2,7 @@
     "name": "db2_fdw",
     "abstract": "PostgreSQL Data Wrappper to DB2 databases",
     "description": "With the Data Wrapper you can acces DB2 Tabels. Not supported for all Data Types (BLOB over 2 GByte)",
-    "version": "6.0.1",
+    "version": "7.0.0",
     "maintainer": [
       "Wolfgang Brandl <brandl.wolfgang@icloud.com>"
    ],
@@ -12,7 +12,7 @@
             "abstract": "PostgreSQL Data Wrappper to DB2 databases",
             "file": "sql/db2_fdw.sql",
             "docfile": "doc/db2_fdw.md",
-            "version": "6.0.1"
+            "version": "7.0.0"
         }
     },
     "resources": {

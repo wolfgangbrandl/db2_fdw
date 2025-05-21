@@ -2,7 +2,7 @@ EXTENSION    = db2_fdw
 EXTVERSION   = $(shell grep default_version $(EXTENSION).control | sed -e "s/default_version[[:space:]]*=[[:space:]]*'\([^']*\)'/\1/")
 MODULE_big   = db2_fdw
 OBJS         = db2_fdw.o db2_utils.o
-RELEASE      = 6.0.1
+RELEASE      = 7.0.0
 
 DATA         = $(wildcard sql/*--*.sql)
 DOCS         = $(wildcard doc/*.md)
@@ -25,7 +25,7 @@ include $(PGXS)
 checkin: clean
 	git remote set-url origin git@github.com:wolfgangbrandl/db2_fdw.git
 	git add --all
-	git commit -m "transaction save"
+	git commit -m "postgres 17 "
 #	git commit -m "`date`"
 	git push -u origin master
 

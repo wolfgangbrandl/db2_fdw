@@ -802,11 +802,27 @@ db2GetForeignPaths (PlannerInfo * root, RelOptInfo * baserel, Oid foreigntableid
     fdwState->order_clause = orderedquery.data;
 
   /* add the only path */
-  add_path (baserel, (Path *) create_foreignscan_path (root, baserel,
-						       NULL,	/* default pathtarget */
-						       baserel->rows, fdwState->startup_cost, fdwState->total_cost, usable_pathkeys, NULL,
-						       NULL,	/* no extra plan */
-						       NIL)
+  add_path (baserel, (Path *) create_foreignscan_path (root,
+			                               baserel,
+#if PG_VERSION_NUM >= 90600
+					               NULL,  /* default pathtarget */
+#endif  /* PG_VERSION_NUM */
+						       baserel->rows,
+#if PG_VERSION_NUM >= 180000
+                                                       0,  /* no disabled plan nodes */
+#endif  /* PG_VERSION_NUM */
+						       fdwState->startup_cost,
+						       fdwState->total_cost,
+						       usable_pathkeys,
+                                                       baserel->lateral_relids,
+#if PG_VERSION_NUM >= 90500
+					               NULL,  /* no extra plan */
+#endif  /* PG_VERSION_NUM */
+#if PG_VERSION_NUM >= 170000
+					               NIL,   /* no fdw_restrictinfo */
+#endif  /* PG_VERSION_NUM */
+					               NIL
+						       )
     );
 }
 
@@ -888,11 +904,30 @@ db2GetForeignJoinPaths (PlannerInfo * root, RelOptInfo * joinrel, RelOptInfo * o
   fdwState->total_cost = total_cost;
 
   /* create a new join path */
-  joinpath = create_foreignscan_path (root, joinrel, NULL,	/* default pathtarget */
-				      rows, startup_cost, total_cost, NIL,	/* no pathkeys */
-				      NULL,	/* no required_outer */
-				      NULL,	/* no epq_path */
-				      NIL);	/* no fdw_private */
+#if PG_VERSION_NUM < 120000
+  joinpath = create_foreignscan_path(
+#else
+  joinpath = create_foreign_join_path(
+#endif  /* PG_VERSION_NUM */
+									   root,
+									   joinrel,
+									   NULL,	/* default pathtarget */
+									   rows,
+#if PG_VERSION_NUM >= 180000
+									   0,	/* no disabled plan nodes */
+#endif  /* PG_VERSION_NUM */
+									   startup_cost,
+									   total_cost,
+									   NIL, 	/* no pathkeys */
+									   joinrel->lateral_relids,
+									   NULL,	/* no epq_path */
+#if PG_VERSION_NUM >= 170000
+									   NIL,		/* no fdw_restrictinfo */
+#endif  /* PG_VERSION_NUM */
+									   NIL);	/* no fdw_private */
+
+
+
 
   /* add generated path to joinrel */
   add_path (joinrel, (Path *) joinpath);
